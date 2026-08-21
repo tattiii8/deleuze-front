@@ -34,9 +34,9 @@ jobs:
       uses: aws-actions/amazon-ecr-login@v2
 
     - name: Build and Push deleuze-mng-front
-      uses: docker/build-push-action@v5
+      uses: docker/build-push-action@v6
       with:
-        context: .
+        context: ./deleuze-mng-front
         file: ./deleuze-mng-front/Dockerfile
         platforms: linux/amd64
         push: true
