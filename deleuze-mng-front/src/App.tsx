@@ -132,7 +132,7 @@ export const App: React.FC = () => {
     <ThemeProvider style={{ height: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: '#f3f2f1' }}>
       {/* Azure Top Bar */}
       <div style={{ background: '#0078d4', color: 'white', padding: '0 20px', height: '48px', display: 'flex', alignItems: 'center' }}>
-        <Text variant="large" style={{ color: 'white', fontWeight: 600 }}>Microsoft Azure Portal | Management Console</Text>
+        <Text variant="large" style={{ color: 'white', fontWeight: 600 }}>Deleuze Management Console</Text>
       </div>
 
       <div style={{ padding: '20px', flex: 1, overflowY: 'auto' }}>
