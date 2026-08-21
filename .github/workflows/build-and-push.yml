@@ -1,0 +1,47 @@
+name: CI to AWS ECR (deleuze-mng-front)
+
+on:
+  push:
+    branches: [ main ]
+
+env:
+  AWS_REGION: ap-northeast-1
+  ECR_REGISTRY: 871950640338.dkr.ecr.ap-northeast-1.amazonaws.com
+  ECR_REPOSITORY: deleuze-mng-front
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Log in to AWS ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+
+    - name: Build and Push deleuze-mng-front
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: .deleuze-mng-front/Dockerfile
+        platforms: linux/amd64
+        push: true
+        build-args: |
+          VITE_MANAGEMENT_API_SECRET=${{ secrets.VITE_MANAGEMENT_API_SECRET }}
+        tags: |
+          ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest
+          ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
