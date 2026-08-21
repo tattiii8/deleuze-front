@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # バックエンドの環境変数 MANAGEMENT_API_SECRET と同じ文字列を指定
+        VITE_APP_MANAGEMENT_API_SECRET: "40b7c5868b116bcdef9964502ecb901d24d01d2931042cfdc188267cf14457e1"
+    container_name: mng-frontend
+    ports:
+      - "8080:80"
