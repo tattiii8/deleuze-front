@@ -37,7 +37,7 @@ jobs:
       uses: docker/build-push-action@v5
       with:
         context: .
-        file: .deleuze-mng-front/Dockerfile
+        file: ./deleuze-mng-front/Dockerfile
         platforms: linux/amd64
         push: true
         build-args: |
