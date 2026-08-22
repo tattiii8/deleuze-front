@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { InternalAxiosRequestConfig } from 'axios';
 import CryptoJS from 'crypto-js';
 
 // 環境変数または設定された SECRET KEY
@@ -20,7 +20,7 @@ const api = axios.create({
   baseURL: '/api/mng'
 });
 
-api.interceptors.request.use((config) => {
+api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   const token = generateDynamicToken();
   config.headers['Authorization'] = `Bearer ${token}`;
   return config;
