@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   Stack,
   Text,
@@ -7,73 +7,37 @@ import {
   DetailsList,
   DetailsListLayoutMode,
   SelectionMode,
-  IColumn,
-  Dialog,
-  DialogType,
-  DialogFooter,
-  Dropdown,
-  IDropdownOption
+  IColumn
 } from '@fluentui/react';
 import { Tenant } from '../types';
 
 interface Props {
   tenants: Tenant[];
   onOpenModal: () => void;
+  onSelectTenant: (tenant: Tenant) => void;
   onDeleteTenant: (tenantId: string) => void;
-  onAddService: (tenantId: string, serviceKey: string) => Promise<void>;
 }
-
-const SERVICE_OPTIONS: IDropdownOption[] = [
-  { key: 'drive', text: 'Drive' },
-  { key: 'analytics', text: 'Analytics' },
-  { key: 'kms', text: 'KMS' }
-];
 
 export const TenantManagement: React.FC<Props> = ({
   tenants,
   onOpenModal,
-  onDeleteTenant,
-  onAddService
+  onSelectTenant,
+  onDeleteTenant
 }) => {
-  const [selectedTenant, setSelectedTenant] = useState<Tenant | null>(null);
-  const [selectedServiceKey, setSelectedServiceKey] = useState<string>('drive');
-  const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
-
-  const handleOpenServiceModal = (tenant: Tenant) => {
-    setSelectedTenant(tenant);
-    setSelectedServiceKey('drive');
-    setIsServiceModalOpen(true);
-  };
-
-  const handleSaveService = async () => {
-    if (!selectedTenant || !selectedServiceKey) return;
-    await onAddService(selectedTenant.tenantId, selectedServiceKey);
-    setIsServiceModalOpen(false);
-    setSelectedTenant(null);
-  };
-
   const columns: IColumn[] = [
-    { key: 'col1', name: 'Tenant ID', fieldName: 'tenantId', minWidth: 150 },
+    { key: 'col1', name: 'Tenant ID', fieldName: 'tenantId', minWidth: 200 },
     {
       key: 'col2',
-      name: '有効サービス',
-      minWidth: 180,
-      onRender: (item: Tenant) => (
-        <span>{(item.enabledServices && item.enabledServices.length > 0) ? item.enabledServices.join(', ') : 'なし'}</span>
-      )
-    },
-    {
-      key: 'col3',
       name: '操作',
-      minWidth: 220,
+      minWidth: 200,
       onRender: (item: Tenant) => (
         <Stack horizontal tokens={{ childrenGap: 8 }}>
-          <DefaultButton
-            iconProps={{ iconName: 'Add' }}
-            onClick={() => handleOpenServiceModal(item)}
+          <PrimaryButton
+            iconProps={{ iconName: 'Info' }}
+            onClick={() => onSelectTenant(item)}
           >
-            サービス追加
-          </DefaultButton>
+            詳細
+          </PrimaryButton>
           <DefaultButton
             iconProps={{ iconName: 'Delete' }}
             onClick={() => onDeleteTenant(item.tenantId)}
@@ -100,28 +64,6 @@ export const TenantManagement: React.FC<Props> = ({
         selectionMode={SelectionMode.none}
         layoutMode={DetailsListLayoutMode.justified}
       />
-
-      <Dialog
-        hidden={!isServiceModalOpen}
-        onDismiss={() => setIsServiceModalOpen(false)}
-        dialogContentProps={{
-          type: DialogType.normal,
-          title: `サービス追加 (${selectedTenant?.tenantId})`
-        }}
-      >
-        <Stack tokens={{ childrenGap: 12 }} style={{ marginTop: 10 }}>
-          <Dropdown
-            label="追加するサービスを選択"
-            selectedKey={selectedServiceKey}
-            options={SERVICE_OPTIONS}
-            onChange={(_, option) => setSelectedServiceKey(option?.key as string)}
-          />
-        </Stack>
-        <DialogFooter>
-          <PrimaryButton onClick={handleSaveService} text="追加" />
-          <DefaultButton onClick={() => setIsServiceModalOpen(false)} text="キャンセル" />
-        </DialogFooter>
-      </Dialog>
     </Stack>
   );
 };

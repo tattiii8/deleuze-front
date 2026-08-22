@@ -1,6 +1,7 @@
 export interface Tenant {
   tenantId: string;
   enabledServices?: string[];
+  services?: string[];
 }
 
 export interface User {

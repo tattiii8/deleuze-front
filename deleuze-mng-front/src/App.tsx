@@ -6,6 +6,7 @@ import { Header } from './components/Header';
 import { TenantModal } from './components/TenantModal';
 import { UserModal } from './components/UserModal';
 import { TenantManagement } from './pages/TenantManagement';
+import { TenantDetail } from './pages/TenantDetail';
 import { UserManagement } from './pages/UserManagement';
 
 initializeIcons();
@@ -13,6 +14,7 @@ initializeIcons();
 export const App: React.FC = () => {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [selectedTenant, setSelectedTenant] = useState<Tenant | null>(null);
   const [msg, setMsg] = useState<SystemMessage | null>(null);
 
   const [isTenantModalOpen, setIsTenantModalOpen] = useState(false);
@@ -26,10 +28,20 @@ export const App: React.FC = () => {
   const loadData = async () => {
     try {
       const [tRes, uRes] = await Promise.all([api.get('/tenants'), api.get('/users')]);
-      setTenants(tRes.data);
+      const fetchedTenants: Tenant[] = tRes.data;
+      setTenants(fetchedTenants);
       setUsers(uRes.data);
-    } catch (err: any) {
-      showMsg(err.response?.data?.error || "データ取得に失敗しました", MessageBarType.error);
+
+      // 詳細画面を開いている最中の場合、最新データに更新
+      if (selectedTenant) {
+        const updated = fetchedTenants.find((t) => t.tenantId === selectedTenant.tenantId);
+        if (updated) setSelectedTenant(updated);
+      }
+    } catch (err: unknown) {
+      const errorMessage = err && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
+        : "データ取得に失敗しました";
+      showMsg(errorMessage || "データ取得に失敗しました", MessageBarType.error);
     }
   };
 
@@ -42,8 +54,11 @@ export const App: React.FC = () => {
       showMsg(`テナント '${tenantId}' を作成しました。`, MessageBarType.success);
       setIsTenantModalOpen(false);
       loadData();
-    } catch (err: any) {
-      showMsg(err.response?.data?.error || "作成に失敗しました", MessageBarType.error);
+    } catch (err: unknown) {
+      const errorMessage = err && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
+        : "作成に失敗しました";
+      showMsg(errorMessage || "作成に失敗しました", MessageBarType.error);
     }
   };
 
@@ -52,6 +67,9 @@ export const App: React.FC = () => {
     try {
       await api.delete(`/tenants/${tenantId}`);
       showMsg(`テナント '${tenantId}' を削除しました。`, MessageBarType.success);
+      if (selectedTenant?.tenantId === tenantId) {
+        setSelectedTenant(null);
+      }
       loadData();
     } catch {
       showMsg("削除に失敗しました", MessageBarType.error);
@@ -62,9 +80,13 @@ export const App: React.FC = () => {
     try {
       await api.post(`/tenants/${tenantId}/services`, { serviceKey });
       showMsg(`テナント '${tenantId}' にサービス '${serviceKey}' を追加しました。`, MessageBarType.success);
-      loadData();
-    } catch (err: any) {
-      showMsg(err.response?.data?.error || "サービスの追加に失敗しました", MessageBarType.error);
+      await loadData();
+    } catch (err: unknown) {
+      const errorMessage = err && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
+        : "サービスの追加に失敗しました";
+      showMsg(errorMessage || "サービスの追加に失敗しました", MessageBarType.error);
+      throw err;
     }
   };
 
@@ -74,8 +96,11 @@ export const App: React.FC = () => {
       showMsg(`ユーザー '${loginId}' を登録しました。`, MessageBarType.success);
       setIsUserModalOpen(false);
       loadData();
-    } catch (err: any) {
-      showMsg(err.response?.data?.error || "ユーザー登録に失敗しました", MessageBarType.error);
+    } catch (err: unknown) {
+      const errorMessage = err && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
+        : "ユーザー登録に失敗しました";
+      showMsg(errorMessage || "ユーザー登録に失敗しました", MessageBarType.error);
     }
   };
 
@@ -98,12 +123,20 @@ export const App: React.FC = () => {
 
         <Pivot aria-label="Management Sections">
           <PivotItem headerText="テナント管理" itemIcon="Tenant">
-            <TenantManagement
-              tenants={tenants}
-              onOpenModal={() => setIsTenantModalOpen(true)}
-              onDeleteTenant={handleDeleteTenant}
-              onAddService={handleAddService}
-            />
+            {selectedTenant ? (
+              <TenantDetail
+                tenant={selectedTenant}
+                onBack={() => setSelectedTenant(null)}
+                onAddService={handleAddService}
+              />
+            ) : (
+              <TenantManagement
+                tenants={tenants}
+                onOpenModal={() => setIsTenantModalOpen(true)}
+                onSelectTenant={(tenant) => setSelectedTenant(tenant)}
+                onDeleteTenant={handleDeleteTenant}
+              />
+            )}
           </PivotItem>
 
           <PivotItem headerText="ユーザー管理" itemIcon="People">
