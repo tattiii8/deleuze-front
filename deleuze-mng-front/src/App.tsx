@@ -1,5 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { ThemeProvider, Pivot, PivotItem, MessageBar, MessageBarType, initializeIcons } from '@fluentui/react';
+import { 
+  ThemeProvider, 
+  Pivot, 
+  PivotItem, 
+  MessageBar, 
+  MessageBarType, 
+  initializeIcons,
+  createTheme,
+  mergeStyles
+} from '@fluentui/react';
 import api from './api';
 import { Tenant, User, SystemMessage } from './types';
 import { Header } from './components/Header';
@@ -10,6 +19,43 @@ import { TenantDetail } from './pages/TenantDetail';
 import { UserManagement } from './pages/UserManagement';
 
 initializeIcons();
+
+// Azure ポータル同等のフォント・カラーテーマ定義
+const azureTheme = createTheme({
+  defaultFontStyle: {
+    fontFamily: '"Segoe UI", -apple-system, BlinkMacSystemFont, "Yu Gothic UI", "Meiryo", sans-serif',
+    fontWeight: 'normal'
+  },
+  fonts: {
+    small: { fontSize: '12px', color: '#605e5c' },
+    medium: { fontSize: '13px' },
+    mediumPlus: { fontSize: '14px', fontWeight: 600 },
+    large: { fontSize: '16px', fontWeight: 600 },
+    xLarge: { fontSize: '18px', fontWeight: 600, color: '#11100f' }
+  },
+  palette: {
+    themePrimary: '#0078d4',
+    neutralPrimary: '#323130',
+    neutralSecondary: '#605e5c',
+    neutralLighter: '#f3f2f1'
+  }
+});
+
+// 全要素へ Azure 風フォントを強制適用するスタイルクラス
+const globalFontClass = mergeStyles({
+  fontFamily: '"Segoe UI", -apple-system, BlinkMacSystemFont, "Yu Gothic UI", "Meiryo", sans-serif !important',
+  selectors: {
+    '*': {
+      fontFamily: '"Segoe UI", -apple-system, BlinkMacSystemFont, "Yu Gothic UI", "Meiryo", sans-serif !important',
+      WebkitFontSmoothing: 'antialiased',
+      MozOsxFontSmoothing: 'grayscale'
+    },
+    '.ms-Pivot-link': {
+      fontWeight: '600 !important',
+      fontSize: '14px !important'
+    }
+  }
+});
 
 export const App: React.FC = () => {
   const [tenants, setTenants] = useState<Tenant[]>([]);
@@ -32,7 +78,6 @@ export const App: React.FC = () => {
       setTenants(fetchedTenants);
       setUsers(uRes.data);
 
-      // 詳細画面を開いている最中の場合、最新データに更新
       if (selectedTenant) {
         const updated = fetchedTenants.find((t) => t.tenantId === selectedTenant.tenantId);
         if (updated) setSelectedTenant(updated);
@@ -115,7 +160,11 @@ export const App: React.FC = () => {
   };
 
   return (
-    <ThemeProvider style={{ height: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: '#f3f2f1' }}>
+    <ThemeProvider 
+      theme={azureTheme} 
+      className={globalFontClass}
+      style={{ height: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: '#f3f2f1' }}
+    >
       <Header />
 
       <div style={{ padding: '20px', flex: 1, overflowY: 'auto' }}>
