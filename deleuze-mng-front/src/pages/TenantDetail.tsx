@@ -1,15 +1,15 @@
 // src/pages/TenantDetail.tsx
-import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { fetchTenants, enableService, generateApiKey, updateAuthMode } from '../api';
+import React, { useState } from 'react';
+import { generateApiKey, updateAuthMode } from '../api';
 import { Tenant } from '../types';
 
-export const TenantDetail: React.FC = () => {
-  const { tenantId } = useParams<{ tenantId: string }>();
-  const navigate = useNavigate();
+interface TenantDetailProps {
+  tenant: Tenant;
+  onBack: () => void;
+  onAddService: (tenantId: string, serviceKey: string) => Promise<void>;
+}
 
-  const [tenant, setTenant] = useState<Tenant | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+export const TenantDetail: React.FC<TenantDetailProps> = ({ tenant, onBack, onAddService }) => {
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -18,51 +18,25 @@ export const TenantDetail: React.FC = () => {
   const [actionLoading, setActionLoading] = useState<boolean>(false);
 
   // API Key & AuthMode 用ステート
-  const [apiKey, setApiKey] = useState<string | null>(null);
-  const [authMode, setAuthMode] = useState<number>(0); // Default: 0 (JwtOnly)
+  const [apiKey, setApiKey] = useState<string | null>(tenant.apiKey || null);
+  const [authMode, setAuthMode] = useState<number>(
+    typeof tenant.authMode === 'number' ? tenant.authMode : 0
+  );
   const [isCopied, setIsCopied] = useState<boolean>(false);
-
-  const loadTenant = async () => {
-    if (!tenantId) return;
-    try {
-      setLoading(true);
-      const tenants = await fetchTenants();
-      const current = tenants.find((t) => t.tenantId === tenantId);
-      if (current) {
-        setTenant(current);
-        if (current.apiKey) setApiKey(current.apiKey);
-        if (current.authMode !== undefined) {
-          const modeVal = typeof current.authMode === 'number' ? current.authMode : 0;
-          setAuthMode(modeVal);
-        }
-      } else {
-        setError(`テナント '${tenantId}' が見つかりませんでした。`);
-      }
-    } catch (err: any) {
-      setError(err.message || 'テナント情報の取得に失敗しました。');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadTenant();
-  }, [tenantId]);
 
   // サービス有効化ハンドラー
   const handleEnableService = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!tenantId || !serviceKey.trim()) return;
+    if (!serviceKey.trim()) return;
 
     setActionLoading(true);
     setError(null);
     setSuccessMessage(null);
 
     try {
-      await enableService(tenantId, serviceKey.trim());
+      await onAddService(tenant.tenantId, serviceKey.trim());
       setSuccessMessage(`サービス '${serviceKey}' を有効化しました。`);
       setServiceKey('');
-      await loadTenant();
     } catch (err: any) {
       setError(err.message || 'サービスの有効化に失敗しました。');
     } finally {
@@ -72,7 +46,6 @@ export const TenantDetail: React.FC = () => {
 
   // API Key 発行ハンドラー
   const handleGenerateApiKey = async () => {
-    if (!tenantId) return;
     if (apiKey && !window.confirm('API Key を再発行すると既存のキーは無効になります。よろしいですか？')) {
       return;
     }
@@ -82,7 +55,7 @@ export const TenantDetail: React.FC = () => {
     setSuccessMessage(null);
 
     try {
-      const res = await generateApiKey(tenantId);
+      const res = await generateApiKey(tenant.tenantId);
       setApiKey(res.apiKey);
       setSuccessMessage('新しい API Key を発行しました。');
     } catch (err: any) {
@@ -94,14 +67,12 @@ export const TenantDetail: React.FC = () => {
 
   // 認証モード更新ハンドラー
   const handleAuthModeChange = async (newMode: number) => {
-    if (!tenantId) return;
-
     setActionLoading(true);
     setError(null);
     setSuccessMessage(null);
 
     try {
-      await updateAuthMode(tenantId, newMode);
+      await updateAuthMode(tenant.tenantId, newMode);
       setAuthMode(newMode);
       setSuccessMessage('認証モードを更新しました。');
     } catch (err: any) {
@@ -119,19 +90,16 @@ export const TenantDetail: React.FC = () => {
     }
   };
 
-  if (loading) return <div>読み込み中...</div>;
-  if (error && !tenant) return <div style={{ color: 'red' }}>{error}</div>;
-
   return (
     <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto' }}>
       <button 
-        onClick={() => navigate('/tenants')} 
+        onClick={onBack} 
         style={{ background: 'none', border: 'none', color: '#0066cc', cursor: 'pointer', padding: 0, marginBottom: '15px' }}
       >
         &larr; テナント一覧に戻る
       </button>
 
-      <h2>テナント詳細: {tenantId}</h2>
+      <h2>テナント詳細: {tenant.tenantId}</h2>
 
       {error && <div style={{ color: 'red', marginBottom: '10px' }}>{error}</div>}
       {successMessage && <div style={{ color: 'green', marginBottom: '10px' }}>{successMessage}</div>}
@@ -193,7 +161,7 @@ export const TenantDetail: React.FC = () => {
       <div style={{ border: '1px solid #ccc', padding: '15px', borderRadius: '5px', marginBottom: '20px' }}>
         <h3>有効化サービス一覧</h3>
         <ul>
-          {tenant?.services && tenant.services.length > 0 ? (
+          {tenant.services && tenant.services.length > 0 ? (
             tenant.services.map((s) => <li key={s}>{s}</li>)
           ) : (
             <li>有効化された追加サービスはありません。</li>
