@@ -1,11 +1,13 @@
 // src/pages/TenantDetail.tsx
 import React, { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { fetchTenants, enableService, generateApiKey, updateAuthMode } from '../api';
 import { Tenant } from '../types';
 
 export const TenantDetail: React.FC = () => {
   const { tenantId } = useParams<{ tenantId: string }>();
+  const navigate = useNavigate();
+
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -30,7 +32,6 @@ export const TenantDetail: React.FC = () => {
         setTenant(current);
         if (current.apiKey) setApiKey(current.apiKey);
         if (current.authMode !== undefined) {
-          // 数値または文字列からのマッピング対応
           const modeVal = typeof current.authMode === 'number' ? current.authMode : 0;
           setAuthMode(modeVal);
         }
@@ -123,7 +124,13 @@ export const TenantDetail: React.FC = () => {
 
   return (
     <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto' }}>
-      <Link to="/tenants">&larr; テナント一覧に戻る</Link>
+      <button 
+        onClick={() => navigate('/tenants')} 
+        style={{ background: 'none', border: 'none', color: '#0066cc', cursor: 'pointer', padding: 0, marginBottom: '15px' }}
+      >
+        &larr; テナント一覧に戻る
+      </button>
+
       <h2>テナント詳細: {tenantId}</h2>
 
       {error && <div style={{ color: 'red', marginBottom: '10px' }}>{error}</div>}
