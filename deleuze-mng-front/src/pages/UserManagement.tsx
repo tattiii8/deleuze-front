@@ -93,9 +93,6 @@ export const UserManagement: React.FC<Props> = ({ users, onOpenModal, onDeleteUs
       <Stack horizontal horizontalAlign="space-between" verticalAlign="center">
         <Stack tokens={{ childrenGap: 4 }}>
           <Text variant="xLarge" style={{ fontWeight: 600 }}>ユーザー一覧</Text>
-          <Text variant="small" style={{ color: theme.palette.neutralSecondary }}>
-            登録済みのシステムユーザー（{users.length}件）を管理します
-          </Text>
         </Stack>
         <PrimaryButton
           iconProps={{ iconName: 'AddFriend' }}
