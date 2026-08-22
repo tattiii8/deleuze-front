@@ -1,7 +1,10 @@
+export type AuthMode = 'JwtOnly' | 'ApiKeyOnly' | 'Both' | number;
+
 export interface Tenant {
   tenantId: string;
-  enabledServices?: string[];
-  services?: string[];
+  services: string[];
+  apiKey?: string;
+  authMode?: AuthMode;
 }
 
 export interface User {
