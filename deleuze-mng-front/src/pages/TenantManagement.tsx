@@ -1,109 +1,125 @@
+// src/pages/TenantManagement.tsx
 import React from 'react';
-import {
-  Stack,
-  Text,
-  PrimaryButton,
-  DefaultButton,
-  DetailsList,
-  DetailsListLayoutMode,
-  SelectionMode,
-  IColumn,
-  Icon,
-  getTheme
-} from '@fluentui/react';
 import { Tenant } from '../types';
 
-interface Props {
+interface TenantManagementProps {
   tenants: Tenant[];
-  onOpenModal: () => void;
+  loading: boolean;
+  error: string | null;
   onSelectTenant: (tenant: Tenant) => void;
-  onDeleteTenant: (tenantId: string) => void;
+  onRefresh: () => Promise<void>;
 }
 
-const theme = getTheme();
-
-export const TenantManagement: React.FC<Props> = ({
+export const TenantManagement: React.FC<TenantManagementProps> = ({
   tenants,
-  onOpenModal,
+  loading,
+  error,
   onSelectTenant,
-  onDeleteTenant
+  onRefresh
 }) => {
-  const columns: IColumn[] = [
-    {
-      key: 'col1',
-      name: 'Tenant ID',
-      fieldName: 'tenantId',
-      minWidth: 200,
-      maxWidth: 350,
-      onRender: (item: Tenant) => (
-        <Stack horizontal verticalAlign="center" tokens={{ childrenGap: 10 }}>
-          <Icon iconName="Org" style={{ color: theme.palette.themePrimary, fontSize: 16 }} />
-          <Text variant="mediumPlus" style={{ fontWeight: 600, color: theme.palette.neutralPrimary }}>
-            {item.tenantId}
-          </Text>
-        </Stack>
-      )
-    },
-    {
-      key: 'col2',
-      name: '操作',
-      minWidth: 180,
-      maxWidth: 220,
-      onRender: (item: Tenant) => (
-        <Stack horizontal tokens={{ childrenGap: 8 }}>
-          <PrimaryButton
-            iconProps={{ iconName: 'Info' }}
-            onClick={() => onSelectTenant(item)}
-            styles={{ root: { borderRadius: 4 } }}
-          >
-            詳細
-          </PrimaryButton>
-          <DefaultButton
-            iconProps={{ iconName: 'Delete' }}
-            onClick={() => onDeleteTenant(item.tenantId)}
-            styles={{ root: { borderRadius: 4 } }}
-          >
-            削除
-          </DefaultButton>
-        </Stack>
-      )
-    }
-  ];
+  if (loading) {
+    return <div style={{ padding: '20px' }}>テナント一覧を読み込み中...</div>;
+  }
+
+  if (error) {
+    return (
+      <div style={{ padding: '20px', color: 'red' }}>
+        <p>{error}</p>
+        <button onClick={onRefresh}>再試行</button>
+      </div>
+    );
+  }
 
   return (
-    <Stack tokens={{ childrenGap: 20 }} style={{ marginTop: 15 }}>
-      {/* ヘッダーエリア */}
-      <Stack horizontal horizontalAlign="space-between" verticalAlign="center">
-        <Stack tokens={{ childrenGap: 4 }}>
-          <Text variant="xLarge" style={{ fontWeight: 600 }}>登録済みテナント一覧</Text>
-        </Stack>
-        <PrimaryButton 
-          iconProps={{ iconName: 'Add' }} 
-          onClick={onOpenModal}
-          styles={{ root: { height: 36, borderRadius: 4 } }}
+    <div style={{
+      padding: '24px',
+      maxWidth: '900px',
+      margin: '20px auto',
+      backgroundColor: '#ffffff',
+      borderRadius: '8px',
+      boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <h2 style={{ margin: 0 }}>テナント管理一覧</h2>
+        <button 
+          onClick={onRefresh}
+          style={{
+            padding: '6px 12px',
+            backgroundColor: '#f0f0f0',
+            border: '1px solid #ccc',
+            borderRadius: '4px',
+            cursor: 'pointer'
+          }}
         >
-          新規テナント作成
-        </PrimaryButton>
-      </Stack>
-
-      {/* カード風スタイルのテーブルコンテナ */}
-      <div 
-        style={{ 
-          background: theme.palette.white, 
-          borderRadius: 8, 
-          boxShadow: '0 1.6px 3.6px 0 rgba(0,0,0,0.132), 0 0.3px 0.9px 0 rgba(0,0,0,0.108)',
-          padding: '12px 16px',
-          maxWidth: 800 // コンテナの最大幅を制限して間延びを完全に防止
-        }}
-      >
-        <DetailsList
-          items={tenants}
-          columns={columns}
-          selectionMode={SelectionMode.none}
-          layoutMode={DetailsListLayoutMode.fixedColumns} // 列幅を固定して不自然な伸縮を防止
-          isHeaderVisible={true}
-        />
+          更新
+        </button>
       </div>
-    </Stack>
+
+      {tenants.length === 0 ? (
+        <p style={{ color: '#666' }}>登録されているテナントはありません。</p>
+      ) : (
+        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+          <thead>
+            <tr style={{ backgroundColor: '#f8f9fa', borderBottom: '2px solid #dee2e6' }}>
+              <th style={{ padding: '12px' }}>テナント ID</th>
+              <th style={{ padding: '12px' }}>認証方式</th>
+              <th style={{ padding: '12px' }}>API Key</th>
+              <th style={{ padding: '12px' }}>有効サービス</th>
+              <th style={{ padding: '12px', textAlign: 'center' }}>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {tenants.map((tenant) => {
+              const authMode = (tenant as any).authMode ?? (tenant as any).AuthMode ?? 0;
+              const apiKey = (tenant as any).apiKey ?? (tenant as any).ApiKey;
+
+              const modeLabel =
+                authMode === 2 ? 'Hybrid' :
+                authMode === 1 ? 'API Key のみ' : 'JWT のみ';
+
+              return (
+                <tr key={tenant.tenantId} style={{ borderBottom: '1px solid #dee2e6' }}>
+                  <td style={{ padding: '12px', fontWeight: 'bold' }}>{tenant.tenantId}</td>
+                  <td style={{ padding: '12px' }}>{modeLabel}</td>
+                  <td style={{ padding: '12px' }}>
+                    {apiKey ? (
+                      <span style={{ color: '#28a745', fontSize: '13px' }}>● 発行済み</span>
+                    ) : (
+                      <span style={{ color: '#999', fontSize: '13px' }}>未発行</span>
+                    )}
+                  </td>
+                  <td style={{ padding: '12px' }}>
+                    {tenant.services && tenant.services.length > 0 ? (
+                      tenant.services.map((s) => (
+                        <span key={s} style={{ backgroundColor: '#e2e8f0', padding: '2px 6px', borderRadius: '4px', fontSize: '12px', marginRight: '4px' }}>
+                          {s}
+                        </span>
+                      ))
+                    ) : (
+                      <span style={{ color: '#999', fontSize: '12px' }}>なし</span>
+                    )}
+                  </td>
+                  <td style={{ padding: '12px', textAlign: 'center' }}>
+                    <button
+                      onClick={() => onSelectTenant(tenant)}
+                      style={{
+                        padding: '6px 12px',
+                        backgroundColor: '#0066cc',
+                        color: '#ffffff',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      詳細・設定
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+    </div>
   );
 };

@@ -7,6 +7,7 @@ interface TenantDetailProps {
   tenant: Tenant;
   onBack: () => void;
   onAddService: (tenantId: string, serviceKey: string) => Promise<void>;
+  onRefresh: () => Promise<void>;
 }
 
 const AVAILABLE_SERVICES = [
@@ -19,7 +20,12 @@ const AUTH_MODE_LABELS: Record<number, string> = {
   2: '両方許可 (Hybrid)',
 };
 
-export const TenantDetail: React.FC<TenantDetailProps> = ({ tenant, onBack, onAddService }) => {
+export const TenantDetail: React.FC<TenantDetailProps> = ({ 
+  tenant, 
+  onBack, 
+  onAddService,
+  onRefresh 
+}) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'settings'>('overview');
   
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +41,7 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({ tenant, onBack, onAd
   );
   const [actionLoading, setActionLoading] = useState<boolean>(false);
 
-  // プロパティ名のケース違い(authMode / AuthMode)を吸収して初期化
+  // ケース違い(authMode / AuthMode)を判定
   const initialAuthMode = (tenant as any).authMode ?? (tenant as any).AuthMode;
   const initialApiKey = (tenant as any).apiKey ?? (tenant as any).ApiKey;
 
@@ -45,7 +51,7 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({ tenant, onBack, onAd
   );
   const [isCopied, setIsCopied] = useState<boolean>(false);
 
-  // 親から渡される tenant props の変更を検知してステートを再同期
+  // 親から渡される tenant props の変更を検知してローカルステートを同期
   useEffect(() => {
     const currentAuthMode = (tenant as any).authMode ?? (tenant as any).AuthMode;
     const currentApiKey = (tenant as any).apiKey ?? (tenant as any).ApiKey;
@@ -53,9 +59,7 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({ tenant, onBack, onAd
     if (typeof currentAuthMode === 'number') {
       setAuthMode(currentAuthMode);
     }
-    if (currentApiKey !== undefined) {
-      setApiKey(currentApiKey || null);
-    }
+    setApiKey(currentApiKey || null);
   }, [tenant]);
 
   // サービス有効化
@@ -93,6 +97,7 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({ tenant, onBack, onAd
       const res = await generateApiKey(tenant.tenantId);
       setApiKey(res.apiKey);
       setSuccessMessage('新しい API Key を発行しました。安全な場所に保存してください。');
+      await onRefresh(); // 👈 親(App.tsx)のステートを更新
     } catch (err: any) {
       setError(err.message || 'API Key の発行に失敗しました。');
     } finally {
@@ -110,6 +115,7 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({ tenant, onBack, onAd
       await updateAuthMode(tenant.tenantId, newMode);
       setAuthMode(newMode);
       setSuccessMessage('認証モードを更新しました。');
+      await onRefresh(); // 👈 親(App.tsx)のステートを更新
     } catch (err: any) {
       setError(err.message || '認証モードの更新に失敗しました。');
     } finally {

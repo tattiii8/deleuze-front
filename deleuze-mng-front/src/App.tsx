@@ -1,215 +1,77 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  ThemeProvider, 
-  Pivot, 
-  PivotItem, 
-  MessageBar, 
-  MessageBarType, 
-  initializeIcons,
-  createTheme,
-  mergeStyles
-} from '@fluentui/react';
-import api from './api';
-import { Tenant, User, SystemMessage } from './types';
+// src/App.tsx
+import React, { useEffect, useState } from 'react';
+// 名前付きエクスポート { Header } に修正
 import { Header } from './components/Header';
-import { TenantModal } from './components/TenantModal';
-import { UserModal } from './components/UserModal';
+// 名前付きエクスポート { TenantManagement } に修正
 import { TenantManagement } from './pages/TenantManagement';
-import { TenantDetail } from './pages/TenantDetail';
+// 名前付きエクスポート { UserManagement } に修正
 import { UserManagement } from './pages/UserManagement';
-
-initializeIcons();
-
-// Azure ポータル同等のフォント・カラーテーマ定義
-const azureTheme = createTheme({
-  defaultFontStyle: {
-    fontFamily: '"Segoe UI", -apple-system, BlinkMacSystemFont, "Yu Gothic UI", "Meiryo", sans-serif',
-    fontWeight: 'normal'
-  },
-  fonts: {
-    small: { fontSize: '12px', color: '#605e5c' },
-    medium: { fontSize: '13px' },
-    mediumPlus: { fontSize: '14px', fontWeight: 600 },
-    large: { fontSize: '16px', fontWeight: 600 },
-    xLarge: { fontSize: '18px', fontWeight: 600, color: '#11100f' }
-  },
-  palette: {
-    themePrimary: '#0078d4',
-    neutralPrimary: '#323130',
-    neutralSecondary: '#605e5c',
-    neutralLighter: '#f3f2f1'
-  }
-});
-
-// 全要素へ Azure 風フォントを強制適用するスタイルクラス
-const globalFontClass = mergeStyles({
-  fontFamily: '"Segoe UI", -apple-system, BlinkMacSystemFont, "Yu Gothic UI", "Meiryo", sans-serif !important',
-  selectors: {
-    '*': {
-      fontFamily: '"Segoe UI", -apple-system, BlinkMacSystemFont, "Yu Gothic UI", "Meiryo", sans-serif !important',
-      WebkitFontSmoothing: 'antialiased',
-      MozOsxFontSmoothing: 'grayscale'
-    },
-    '.ms-Pivot-link': {
-      fontWeight: '600 !important',
-      fontSize: '14px !important'
-    }
-  }
-});
+import { TenantDetail } from './pages/TenantDetail';
+import { fetchTenants, enableService } from './api';
+import { Tenant } from './types';
 
 export const App: React.FC = () => {
+  const [currentTab, setCurrentTab] = useState<'tenants' | 'users'>('tenants');
   const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
-  const [selectedTenant, setSelectedTenant] = useState<Tenant | null>(null);
-  const [msg, setMsg] = useState<SystemMessage | null>(null);
+  const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const [isTenantModalOpen, setIsTenantModalOpen] = useState(false);
-  const [isUserModalOpen, setIsUserModalOpen] = useState(false);
-
-  const showMsg = (text: string, type: MessageBarType) => {
-    setMsg({ text, type });
-    setTimeout(() => setMsg(null), 5000);
-  };
-
-  const loadData = async () => {
+  // テナント一覧の取得 & 選択中テナントのデータ同期
+  const loadTenants = async () => {
     try {
-      const [tRes, uRes] = await Promise.all([api.get('/tenants'), api.get('/users')]);
-      const fetchedTenants: Tenant[] = tRes.data;
-      setTenants(fetchedTenants);
-      setUsers(uRes.data);
-
-      if (selectedTenant) {
-        const updated = fetchedTenants.find((t) => t.tenantId === selectedTenant.tenantId);
-        if (updated) setSelectedTenant(updated);
-      }
-    } catch (err: unknown) {
-      const errorMessage = err && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
-        : "データ取得に失敗しました";
-      showMsg(errorMessage || "データ取得に失敗しました", MessageBarType.error);
+      setLoading(true);
+      const data = await fetchTenants();
+      setTenants(data);
+    } catch (err: any) {
+      setError(err.message || 'テナント一覧の取得に失敗しました。');
+    } finally {
+      setLoading(false);
     }
   };
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => {
+    loadTenants();
+  }, []);
 
-  const handleCreateTenant = async (tenantId: string, enableDrive: boolean) => {
-    try {
-      const services = enableDrive ? ['drive'] : [];
-      await api.post('/tenants', { tenantId, enabledServices: services });
-      showMsg(`テナント '${tenantId}' を作成しました。`, MessageBarType.success);
-      setIsTenantModalOpen(false);
-      loadData();
-    } catch (err: unknown) {
-      const errorMessage = err && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
-        : "作成に失敗しました";
-      showMsg(errorMessage || "作成に失敗しました", MessageBarType.error);
-    }
-  };
-
-  const handleDeleteTenant = async (tenantId: string) => {
-    if (!window.confirm(`テナント '${tenantId}' を削除しますか？`)) return;
-    try {
-      await api.delete(`/tenants/${tenantId}`);
-      showMsg(`テナント '${tenantId}' を削除しました。`, MessageBarType.success);
-      if (selectedTenant?.tenantId === tenantId) {
-        setSelectedTenant(null);
-      }
-      loadData();
-    } catch {
-      showMsg("削除に失敗しました", MessageBarType.error);
-    }
-  };
-
+  // サービス追加ハンドラー
   const handleAddService = async (tenantId: string, serviceKey: string) => {
-    try {
-      await api.post(`/tenants/${tenantId}/services`, { serviceKey });
-      showMsg(`テナント '${tenantId}' にサービス '${serviceKey}' を追加しました。`, MessageBarType.success);
-      await loadData();
-    } catch (err: unknown) {
-      const errorMessage = err && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
-        : "サービスの追加に失敗しました";
-      showMsg(errorMessage || "サービスの追加に失敗しました", MessageBarType.error);
-      throw err;
-    }
+    await enableService(tenantId, serviceKey);
+    await loadTenants();
   };
 
-  const handleRegisterUser = async (loginId: string, password: string, tenantId: string) => {
-    try {
-      await api.post('/users', { loginId, password, tenantId });
-      showMsg(`ユーザー '${loginId}' を登録しました。`, MessageBarType.success);
-      setIsUserModalOpen(false);
-      loadData();
-    } catch (err: unknown) {
-      const errorMessage = err && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
-        : "ユーザー登録に失敗しました";
-      showMsg(errorMessage || "ユーザー登録に失敗しました", MessageBarType.error);
-    }
-  };
-
-  const handleDeleteUser = async (id: number) => {
-    try {
-      await api.delete(`/users/${id}`);
-      showMsg("ユーザーを削除しました。", MessageBarType.success);
-      loadData();
-    } catch {
-      showMsg("ユーザー削除に失敗しました", MessageBarType.error);
-    }
-  };
+  // 現在選択されているテナントの最新オブジェクトを取得
+  const selectedTenant = tenants.find((t) => t.tenantId === selectedTenantId) || null;
 
   return (
-    <ThemeProvider 
-      theme={azureTheme} 
-      className={globalFontClass}
-      style={{ height: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: '#f3f2f1' }}
-    >
-      <Header />
+    <div style={{ minHeight: '100vh', backgroundColor: '#f4f6f8' }}>
+      <Header currentTab={currentTab} onSelectTab={setCurrentTab} />
 
-      <div style={{ padding: '20px', flex: 1, overflowY: 'auto' }}>
-        {msg && <MessageBar messageBarType={msg.type} onDismiss={() => setMsg(null)}>{msg.text}</MessageBar>}
-
-        <Pivot aria-label="Management Sections">
-          <PivotItem headerText="テナント管理" itemIcon="Tenant">
+      <main style={{ padding: '20px' }}>
+        {currentTab === 'tenants' && (
+          <>
             {selectedTenant ? (
               <TenantDetail
                 tenant={selectedTenant}
-                onBack={() => setSelectedTenant(null)}
+                onBack={() => setSelectedTenantId(null)}
                 onAddService={handleAddService}
+                onRefresh={loadTenants}
               />
             ) : (
               <TenantManagement
                 tenants={tenants}
-                onOpenModal={() => setIsTenantModalOpen(true)}
-                onSelectTenant={(tenant) => setSelectedTenant(tenant)}
-                onDeleteTenant={handleDeleteTenant}
+                loading={loading}
+                error={error}
+                onSelectTenant={(tenant) => setSelectedTenantId(tenant.tenantId)}
+                onRefresh={loadTenants}
               />
             )}
-          </PivotItem>
+          </>
+        )}
 
-          <PivotItem headerText="ユーザー管理" itemIcon="People">
-            <UserManagement
-              users={users}
-              onOpenModal={() => setIsUserModalOpen(true)}
-              onDeleteUser={handleDeleteUser}
-            />
-          </PivotItem>
-        </Pivot>
-      </div>
-
-      <TenantModal
-        isOpen={isTenantModalOpen}
-        onDismiss={() => setIsTenantModalOpen(false)}
-        onCreate={handleCreateTenant}
-      />
-
-      <UserModal
-        isOpen={isUserModalOpen}
-        onDismiss={() => setIsUserModalOpen(false)}
-        onCreate={handleRegisterUser}
-      />
-    </ThemeProvider>
+        {currentTab === 'users' && <UserManagement />}
+      </main>
+    </div>
   );
 };
 
