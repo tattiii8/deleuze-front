@@ -1,5 +1,5 @@
 // src/pages/TenantDetail.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { generateApiKey, updateAuthMode } from '../api';
 import { Tenant } from '../types';
 
@@ -35,12 +35,28 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({ tenant, onBack, onAd
   );
   const [actionLoading, setActionLoading] = useState<boolean>(false);
 
-  // API Key & AuthMode ステート
-  const [apiKey, setApiKey] = useState<string | null>(tenant.apiKey || null);
+  // プロパティ名のケース違い(authMode / AuthMode)を吸収して初期化
+  const initialAuthMode = (tenant as any).authMode ?? (tenant as any).AuthMode;
+  const initialApiKey = (tenant as any).apiKey ?? (tenant as any).ApiKey;
+
+  const [apiKey, setApiKey] = useState<string | null>(initialApiKey || null);
   const [authMode, setAuthMode] = useState<number>(
-    typeof tenant.authMode === 'number' ? tenant.authMode : 0
+    typeof initialAuthMode === 'number' ? initialAuthMode : 0
   );
   const [isCopied, setIsCopied] = useState<boolean>(false);
+
+  // 親から渡される tenant props の変更を検知してステートを再同期
+  useEffect(() => {
+    const currentAuthMode = (tenant as any).authMode ?? (tenant as any).AuthMode;
+    const currentApiKey = (tenant as any).apiKey ?? (tenant as any).ApiKey;
+
+    if (typeof currentAuthMode === 'number') {
+      setAuthMode(currentAuthMode);
+    }
+    if (currentApiKey !== undefined) {
+      setApiKey(currentApiKey || null);
+    }
+  }, [tenant]);
 
   // サービス有効化
   const handleEnableService = async (e: React.FormEvent) => {
