@@ -51,6 +51,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({
           tenantId: selectedTenantId || (tenants[0]?.tenantId || '')
         });
       }
+      // 成功時に確実にモーダルを閉じてフォームをリセット
       setIsModalOpen(false);
       setLoginId('');
       setPassword('');
@@ -312,8 +313,8 @@ export const UserManagement: React.FC<UserManagementProps> = ({
 
       {/* ユーザー追加モーダル */}
       {isModalOpen && (
-        <div style={styles.modalOverlay}>
-          <div style={styles.modalContainer}>
+        <div style={styles.modalOverlay} onClick={() => setIsModalOpen(false)}>
+          <div style={styles.modalContainer} onClick={(e) => e.stopPropagation()}>
             <h3 style={{ margin: '0 0 16px 0', fontSize: '18px', fontWeight: 600 }}>新規ユーザー登録</h3>
 
             {actionError && (
