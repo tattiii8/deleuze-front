@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { generateApiKey, updateAuthMode } from '../api';
+import { generateApiKey, updateAuthMode, migrateTenant } from '../api';
 import { Tenant } from '../types';
 
 interface TenantDetailProps {
@@ -38,6 +38,7 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
     unenabledServices[0]?.key || ''
   );
   const [actionLoading, setActionLoading] = useState<boolean>(false);
+  const [migrationLoading, setMigrationLoading] = useState<boolean>(false);
 
   const initialAuthMode = (tenant as any).authMode ?? (tenant as any).AuthMode;
   const initialApiKey = (tenant as any).apiKey ?? (tenant as any).ApiKey;
@@ -116,6 +117,25 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
     }
   };
 
+  const handleMigrate = async () => {
+    if (!window.confirm(`テナント '${tenant.tenantId}' のデータベースマイグレーションを実行しますか？`)) {
+      return;
+    }
+
+    setMigrationLoading(true);
+    setError(null);
+    setSuccessMessage(null);
+
+    try {
+      const res = await migrateTenant(tenant.tenantId);
+      setSuccessMessage(res.message || `テナント '${tenant.tenantId}' のマイグレーションが正常に完了しました。`);
+    } catch (err: any) {
+      setError(err.response?.data?.error || err.message || 'マイグレーションの実行に失敗しました。');
+    } finally {
+      setMigrationLoading(false);
+    }
+  };
+
   const handleCopyApiKey = () => {
     if (apiKey) {
       navigator.clipboard.writeText(apiKey);
@@ -183,12 +203,6 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
       marginTop: 0,
       marginBottom: '8px'
     },
-    fieldGroup: {
-      display: 'flex',
-      flexDirection: 'column' as const,
-      gap: '16px',
-      marginTop: '16px'
-    },
     labelWithInfo: {
       display: 'inline-flex',
       alignItems: 'center',
@@ -234,11 +248,6 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
       borderRadius: '2px',
       fontSize: '13px',
       cursor: 'pointer'
-    },
-    treeLineContainer: {
-      position: 'relative' as const,
-      paddingLeft: '24px',
-      marginTop: '12px'
     },
     treeLine: {
       position: 'absolute' as const,
@@ -348,7 +357,7 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             
-            {/* 1. サブスクリプション/認証方式相当 */}
+            {/* 1. 認証方式 */}
             <div>
               <label style={{ ...styles.labelWithInfo, display: 'block', marginBottom: '8px' }}>
                 認証方式 <span style={{ color: '#a80000' }}>*</span> <span style={styles.infoIcon} title="要求する認証ヘッダーの形式">ⓘ</span>
@@ -365,7 +374,7 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
               </select>
             </div>
 
-            {/* 2. リソースグループ/API Key相当（L字ライン接続） */}
+            {/* 2. API Key 管理 */}
             <div style={{ position: 'relative', paddingLeft: '24px' }}>
               <div style={{ ...styles.treeLine, top: '-24px', bottom: '20px' }} />
               
@@ -429,6 +438,29 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
               ) : (
                 <p style={{ margin: 0, color: '#605e5c' }}>追加可能なサービスはすべて有効化されています。</p>
               )}
+            </div>
+
+            {/* 4. データベース管理 (スキーママイグレーション) */}
+            <div style={{ paddingTop: '16px', borderTop: '1px solid #e1dfdd' }}>
+              <label style={{ ...styles.labelWithInfo, display: 'block', marginBottom: '8px' }}>
+                データベース管理 (スキーママイグレーション) <span style={styles.infoIcon} title="最新のSQLスクリプトを適用します">ⓘ</span>
+              </label>
+              <p style={{ fontSize: '12px', color: '#605e5c', marginBottom: '12px' }}>
+                このテナントのデータベース（スキーマ）に対して、未適用のマイグレーションスクリプトを適用します。
+              </p>
+              <button
+                type="button"
+                onClick={handleMigrate}
+                disabled={migrationLoading || actionLoading}
+                style={{
+                  ...styles.secondaryButton,
+                  backgroundColor: '#f3f2f1',
+                  fontWeight: 600,
+                  borderColor: '#8a8886'
+                }}
+              >
+                {migrationLoading ? 'マイグレーション実行中...' : 'データベースのマイグレーションを実行'}
+              </button>
             </div>
 
           </div>

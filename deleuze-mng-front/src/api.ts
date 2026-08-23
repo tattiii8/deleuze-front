@@ -134,4 +134,13 @@ export async function deleteUser(id: string | number): Promise<void> {
   await api.delete(`/users/${id}`);
 }
 
+
+/**
+ * 指定したテナントのデータベースマイグレーションを実行します
+ */
+export async function migrateTenant(tenantId: string): Promise<{ message: string }> {
+  const response = await api.post<{ message: string }>(`/tenants/${tenantId}/migrate`);
+  return response.data;
+}
+
 export default api;
