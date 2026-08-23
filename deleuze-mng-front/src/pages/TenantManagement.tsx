@@ -7,6 +7,8 @@ interface TenantManagementProps {
   error: string | null;
   onSelectTenant: (tenant: Tenant) => void;
   onRefresh: () => Promise<void>;
+  onCreateTenant: (payload: { tenantId: string; name?: string; services?: string[] }) => Promise<void>;
+  onDeleteTenant: (tenantId: string) => Promise<void>;
 }
 
 export const TenantManagement: React.FC<TenantManagementProps> = ({
@@ -14,14 +16,74 @@ export const TenantManagement: React.FC<TenantManagementProps> = ({
   loading,
   error,
   onSelectTenant,
-  onRefresh
+  onRefresh,
+  onCreateTenant,
+  onDeleteTenant
 }) => {
   const [searchFilter, setSearchFilter] = useState('');
+  
+  // モーダルおよびフォームのステート
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [newTenantId, setNewTenantId] = useState('');
+  const [newTenantName, setNewTenantName] = useState('');
+  const [selectedServices, setSelectedServices] = useState<string[]>([]);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   // フィルタリング処理
   const filteredTenants = tenants.filter((tenant) =>
     tenant.tenantId.toLowerCase().includes(searchFilter.toLowerCase())
   );
+
+  // テナント作成ハンドラー
+  const handleCreateSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTenantId.trim()) return;
+
+    setActionLoading(true);
+    setActionError(null);
+
+    try {
+      await onCreateTenant({
+        tenantId: newTenantId.trim(),
+        name: newTenantName.trim() || undefined,
+        services: selectedServices
+      });
+      setIsModalOpen(false);
+      setNewTenantId('');
+      setNewTenantName('');
+      setSelectedServices([]);
+      await onRefresh();
+    } catch (err: any) {
+      setActionError(err.message || 'テナントの作成に失敗しました。');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // テナント削除ハンドラー
+  const handleDelete = async (tenantId: string) => {
+    if (!window.confirm(`テナント '${tenantId}' を削除してもよろしいですか？この操作は取り消せません。`)) {
+      return;
+    }
+
+    setActionLoading(true);
+    try {
+      await onDeleteTenant(tenantId);
+      await onRefresh();
+    } catch (err: any) {
+      alert(err.message || 'テナントの削除に失敗しました。');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // サービス選択のトグル
+  const handleServiceToggle = (serviceKey: string) => {
+    setSelectedServices((prev) =>
+      prev.includes(serviceKey) ? prev.filter((s) => s !== serviceKey) : [...prev, serviceKey]
+    );
+  };
 
   const styles = {
     container: {
@@ -67,13 +129,26 @@ export const TenantManagement: React.FC<TenantManagementProps> = ({
       backgroundColor: '#ffffff',
       border: '1px solid #8a8886',
       borderRadius: '2px',
-      color: '#0078d4',
+      color: '#323130',
+      fontSize: '13px',
+      cursor: 'pointer',
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: '6px'
+    },
+    createButton: {
+      height: '32px',
+      padding: '0 16px',
+      backgroundColor: '#0078d4',
+      color: '#ffffff',
+      border: 'none',
+      borderRadius: '2px',
       fontSize: '13px',
       fontWeight: 600,
       cursor: 'pointer',
       display: 'inline-flex',
       alignItems: 'center',
-      gap: '6px'
+      gap: '4px'
     },
     table: {
       width: '100%',
@@ -127,6 +202,48 @@ export const TenantManagement: React.FC<TenantManagementProps> = ({
       fontSize: '12px',
       fontWeight: 600,
       cursor: 'pointer'
+    },
+    deleteButton: {
+      height: '28px',
+      padding: '0 12px',
+      backgroundColor: '#ffffff',
+      color: '#a80000',
+      border: '1px solid #f8d7da',
+      borderRadius: '2px',
+      fontSize: '12px',
+      cursor: 'pointer'
+    },
+    /* モーダルスタイル */
+    modalOverlay: {
+      position: 'fixed' as const,
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0, 0, 0, 0.4)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 1000
+    },
+    modalContainer: {
+      backgroundColor: '#ffffff',
+      padding: '24px',
+      width: '100%',
+      maxWidth: '480px',
+      border: '1px solid #8a8886',
+      boxShadow: '0 6.4px 14.4px 0 rgba(0, 0, 0, 0.132), 0 1.2px 3.6px 0 rgba(0, 0, 0, 0.108)'
+    },
+    inputField: {
+      width: '100%',
+      height: '32px',
+      padding: '0 8px',
+      border: '1px solid #605e5c',
+      borderRadius: '2px',
+      fontSize: '13px',
+      outline: 'none',
+      marginTop: '4px',
+      boxSizing: 'border-box' as const
     }
   };
 
@@ -167,9 +284,14 @@ export const TenantManagement: React.FC<TenantManagementProps> = ({
           onChange={(e) => setSearchFilter(e.target.value)}
           style={styles.searchInput}
         />
-        <button onClick={onRefresh} style={styles.refreshButton}>
-          ↻ 更新
-        </button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button onClick={() => setIsModalOpen(true)} style={styles.createButton}>
+            ＋ テナントを作成
+          </button>
+          <button onClick={onRefresh} style={styles.refreshButton}>
+            ↻ 更新
+          </button>
+        </div>
       </div>
 
       {filteredTenants.length === 0 ? (
@@ -184,7 +306,7 @@ export const TenantManagement: React.FC<TenantManagementProps> = ({
               <th style={styles.th}>認証方式</th>
               <th style={styles.th}>API Key</th>
               <th style={styles.th}>有効化済みサービス</th>
-              <th style={{ ...styles.th, textAlign: 'center', width: '100px' }}>操作</th>
+              <th style={{ ...styles.th, textAlign: 'center', width: '160px' }}>操作</th>
             </tr>
           </thead>
           <tbody>
@@ -244,18 +366,101 @@ export const TenantManagement: React.FC<TenantManagementProps> = ({
                     )}
                   </td>
                   <td style={{ ...styles.td, textAlign: 'center' }}>
-                    <button
-                      onClick={() => onSelectTenant(tenant)}
-                      style={styles.primaryButton}
-                    >
-                      詳細
-                    </button>
+                    <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                      <button
+                        onClick={() => onSelectTenant(tenant)}
+                        style={styles.primaryButton}
+                      >
+                        詳細
+                      </button>
+                      <button
+                        onClick={() => handleDelete(tenant.tenantId)}
+                        disabled={actionLoading}
+                        style={styles.deleteButton}
+                      >
+                        削除
+                      </button>
+                    </div>
                   </td>
                 </tr>
               );
             })}
           </tbody>
         </table>
+      )}
+
+      {/* テナント作成モーダル */}
+      {isModalOpen && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.modalContainer}>
+            <h3 style={{ margin: '0 0 16px 0', fontSize: '18px', fontWeight: 600 }}>新規テナントの作成</h3>
+            
+            {actionError && (
+              <div style={{ padding: '8px 12px', backgroundColor: '#fde7e9', border: '1px solid #f8d7da', color: '#a80000', fontSize: '12px', marginBottom: '16px' }}>
+                {actionError}
+              </div>
+            )}
+
+            <form onSubmit={handleCreateSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <label style={{ fontWeight: 600, fontSize: '12px' }}>
+                  テナント ID <span style={{ color: '#a80000' }}>*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="例: tenant-org-01"
+                  value={newTenantId}
+                  onChange={(e) => setNewTenantId(e.target.value)}
+                  style={styles.inputField}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontWeight: 600, fontSize: '12px' }}>テナント表示名</label>
+                <input
+                  type="text"
+                  placeholder="例: 株式会社サンプル"
+                  value={newTenantName}
+                  onChange={(e) => setNewTenantName(e.target.value)}
+                  style={styles.inputField}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontWeight: 600, fontSize: '12px', display: 'block', marginBottom: '6px' }}>
+                  初期有効化サービス
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '13px' }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedServices.includes('drive')}
+                    onChange={() => handleServiceToggle('drive')}
+                  />
+                  Drive (ファイルストレージ)
+                </label>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  disabled={actionLoading}
+                  style={styles.refreshButton}
+                >
+                  キャンセル
+                </button>
+                <button
+                  type="submit"
+                  disabled={actionLoading || !newTenantId.trim()}
+                  style={styles.createButton}
+                >
+                  {actionLoading ? '作成中...' : '作成'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );
