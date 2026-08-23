@@ -93,10 +93,15 @@ export const App: React.FC = () => {
   const selectedTenant = tenants.find((t) => t.tenantId === selectedTenantId) || null;
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#f4f6f8' }}>
+    <div style={{ 
+      height: '100vh', 
+      overflowY: 'auto', // 👈 ここで全体をスクロール可能にする
+      backgroundColor: '#f4f6f8',
+      boxSizing: 'border-box' 
+    }}>
       <Header currentTab={currentTab} onSelectTab={setCurrentTab} />
 
-      <main style={{ padding: '20px' }}>
+      <main style={{ padding: '20px', paddingBottom: '80px' }}> {/* 👈 下部に見切れ防止の余白を確保 */}
         {currentTab === 'tenants' && (
           <>
             {selectedTenant ? (
