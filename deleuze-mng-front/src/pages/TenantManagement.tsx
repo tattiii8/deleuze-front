@@ -12,7 +12,7 @@ interface TenantManagementProps {
 }
 
 export const TenantManagement: React.FC<TenantManagementProps> = ({
-  tenants,
+  tenants = [],
   loading,
   error,
   onSelectTenant,
@@ -22,7 +22,6 @@ export const TenantManagement: React.FC<TenantManagementProps> = ({
 }) => {
   const [searchFilter, setSearchFilter] = useState('');
   
-  // モーダルおよびフォームのステート
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newTenantId, setNewTenantId] = useState('');
   const [newTenantName, setNewTenantName] = useState('');
@@ -30,12 +29,18 @@ export const TenantManagement: React.FC<TenantManagementProps> = ({
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  // フィルタリング処理
   const filteredTenants = tenants.filter((tenant) =>
-    tenant.tenantId.toLowerCase().includes(searchFilter.toLowerCase())
+    (tenant?.tenantId || '').toLowerCase().includes(searchFilter.toLowerCase())
   );
 
-  // テナント作成ハンドラー
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setActionError(null);
+    setNewTenantId('');
+    setNewTenantName('');
+    setSelectedServices([]);
+  };
+
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTenantId.trim()) return;
@@ -49,10 +54,7 @@ export const TenantManagement: React.FC<TenantManagementProps> = ({
         name: newTenantName.trim() || undefined,
         services: selectedServices
       });
-      setIsModalOpen(false);
-      setNewTenantId('');
-      setNewTenantName('');
-      setSelectedServices([]);
+      closeModal();
       await onRefresh();
     } catch (err: any) {
       setActionError(err.message || 'テナントの作成に失敗しました。');
@@ -61,7 +63,6 @@ export const TenantManagement: React.FC<TenantManagementProps> = ({
     }
   };
 
-  // テナント削除ハンドラー
   const handleDelete = async (tenantId: string) => {
     if (!window.confirm(`テナント '${tenantId}' を削除してもよろしいですか？この操作は取り消せません。`)) {
       return;
@@ -78,7 +79,6 @@ export const TenantManagement: React.FC<TenantManagementProps> = ({
     }
   };
 
-  // サービス選択のトグル
   const handleServiceToggle = (serviceKey: string) => {
     setSelectedServices((prev) =>
       prev.includes(serviceKey) ? prev.filter((s) => s !== serviceKey) : [...prev, serviceKey]
@@ -213,7 +213,6 @@ export const TenantManagement: React.FC<TenantManagementProps> = ({
       fontSize: '12px',
       cursor: 'pointer'
     },
-    /* モーダルスタイル */
     modalOverlay: {
       position: 'fixed' as const,
       top: 0,
@@ -275,7 +274,6 @@ export const TenantManagement: React.FC<TenantManagementProps> = ({
         </span>
       </div>
 
-      {/* Azure ツールバー風エリア */}
       <div style={styles.toolbar}>
         <input
           type="text"
@@ -389,10 +387,9 @@ export const TenantManagement: React.FC<TenantManagementProps> = ({
         </table>
       )}
 
-      {/* テナント作成モーダル */}
       {isModalOpen && (
-        <div style={styles.modalOverlay}>
-          <div style={styles.modalContainer}>
+        <div style={styles.modalOverlay} onClick={closeModal}>
+          <div style={styles.modalContainer} onClick={(e) => e.stopPropagation()}>
             <h3 style={{ margin: '0 0 16px 0', fontSize: '18px', fontWeight: 600 }}>新規テナントの作成</h3>
             
             {actionError && (
@@ -437,14 +434,14 @@ export const TenantManagement: React.FC<TenantManagementProps> = ({
                     checked={selectedServices.includes('drive')}
                     onChange={() => handleServiceToggle('drive')}
                   />
-                  Drive (ファイルストレージ)
+                  Drive
                 </label>
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '8px' }}>
                 <button
                   type="button"
-                  onClick={() => setIsModalOpen(false)}
+                  onClick={closeModal}
                   disabled={actionLoading}
                   style={styles.refreshButton}
                 >

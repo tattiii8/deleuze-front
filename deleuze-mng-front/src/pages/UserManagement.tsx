@@ -22,7 +22,6 @@ export const UserManagement: React.FC<UserManagementProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState<string>('');
   
-  // モーダルおよびフォームのステート
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loginId, setLoginId] = useState('');
   const [password, setPassword] = useState('');
@@ -32,9 +31,17 @@ export const UserManagement: React.FC<UserManagementProps> = ({
 
   const filteredUsers = users.filter(
     (user) =>
-      user.loginId?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.tenantId?.toLowerCase().includes(searchQuery.toLowerCase())
+      (user?.loginId || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (user?.tenantId || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setActionError(null);
+    setLoginId('');
+    setPassword('');
+    setSelectedTenantId('');
+  };
 
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,11 +58,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({
           tenantId: selectedTenantId || (tenants[0]?.tenantId || '')
         });
       }
-      // 成功時に確実にモーダルを閉じてフォームをリセット
-      setIsModalOpen(false);
-      setLoginId('');
-      setPassword('');
-      setSelectedTenantId('');
+      closeModal();
     } catch (err: any) {
       setActionError(err.message || 'ユーザーの登録に失敗しました。');
     } finally {
@@ -241,9 +244,6 @@ export const UserManagement: React.FC<UserManagementProps> = ({
     <div style={styles.container}>
       <div style={styles.header}>
         <h2 style={styles.title}>ユーザー管理</h2>
-        <p style={styles.description}>
-          システムに登録されている全ユーザーアカウントおよび所属テナントを管理します。
-        </p>
       </div>
 
       <div style={styles.toolbar}>
@@ -282,23 +282,23 @@ export const UserManagement: React.FC<UserManagementProps> = ({
             </tr>
           </thead>
           <tbody>
-            {filteredUsers.map((user) => (
-              <tr key={user.id} style={{ backgroundColor: '#ffffff' }}>
+            {filteredUsers.map((user, idx) => (
+              <tr key={user?.id || idx} style={{ backgroundColor: '#ffffff' }}>
                 <td style={{ ...styles.td, fontFamily: 'monospace', color: '#605e5c', fontSize: '12px' }}>
-                  {user.id}
+                  {user?.id ?? '-'}
                 </td>
                 <td style={{ ...styles.td, fontWeight: 600, color: '#0078d4' }}>
-                  {user.loginId}
+                  {user?.loginId ?? '-'}
                 </td>
                 <td style={styles.td}>
-                  <span style={styles.badge}>{user.tenantId}</span>
+                  <span style={styles.badge}>{user?.tenantId ?? '-'}</span>
                 </td>
                 <td style={{ ...styles.td, color: '#605e5c', fontSize: '12px' }}>
-                  {user.createdAt}
+                  {user?.createdAt ?? '-'}
                 </td>
                 <td style={{ ...styles.td, textAlign: 'center' }}>
                   <button
-                    onClick={() => handleDelete(user.id, user.loginId)}
+                    onClick={() => handleDelete(user?.id, user?.loginId)}
                     disabled={actionLoading}
                     style={styles.deleteButton}
                   >
@@ -311,9 +311,8 @@ export const UserManagement: React.FC<UserManagementProps> = ({
         </table>
       )}
 
-      {/* ユーザー追加モーダル */}
       {isModalOpen && (
-        <div style={styles.modalOverlay} onClick={() => setIsModalOpen(false)}>
+        <div style={styles.modalOverlay} onClick={closeModal}>
           <div style={styles.modalContainer} onClick={(e) => e.stopPropagation()}>
             <h3 style={{ margin: '0 0 16px 0', fontSize: '18px', fontWeight: 600 }}>新規ユーザー登録</h3>
 
@@ -355,7 +354,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                 <label style={{ fontWeight: 600, fontSize: '12px' }}>所属テナント</label>
                 {tenants.length > 0 ? (
                   <select
-                    value={selectedTenantId || tenants[0]?.tenantId}
+                    value={selectedTenantId || tenants[0]?.tenantId || ''}
                     onChange={(e) => setSelectedTenantId(e.target.value)}
                     style={styles.inputField}
                   >
@@ -379,7 +378,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '8px' }}>
                 <button
                   type="button"
-                  onClick={() => setIsModalOpen(false)}
+                  onClick={closeModal}
                   disabled={actionLoading}
                   style={styles.secondaryButton}
                 >
