@@ -85,7 +85,6 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
       const data = await fetchTenantMigrations(tenant.tenantId);
       setMigrations(data);
     } catch (err) {
-      // バックエンド未実装時のフォールバックとしてエラー時は空にする
       setMigrations([]);
     } finally {
       setLoadingMigrations(false);
@@ -150,7 +149,6 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
     }
   };
 
-  // 3. テナントの一時停止/有効化切り替え
   const handleStatusChange = async (newStatus: 'active' | 'suspended') => {
     const actionName = newStatus === 'suspended' ? '一時停止' : '有効化';
     if (!window.confirm(`テナント '${tenant.tenantId}' を${actionName}しますか？`)) {
@@ -185,7 +183,7 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
     try {
       const res = await migrateTenant(tenant.tenantId);
       setSuccessMessage(res.message || `テナント '${tenant.tenantId}' のマイグレーションが完了しました。`);
-      loadMigrations(); // 履歴を再読み込み
+      loadMigrations();
     } catch (err: any) {
       setError(err.response?.data?.error || err.message || 'マイグレーションの実行に失敗しました。');
     } finally {
@@ -193,7 +191,6 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
     }
   };
 
-  // 4. ヘルスチェック実行
   const handleHealthCheck = async () => {
     setHealthLoading(true);
     setHealthStatus(null);
@@ -203,7 +200,7 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
       const res = await checkTenantHealth(tenant.tenantId);
       setHealthStatus(res);
     } catch (err: any) {
-      setError(err.response?.data?.error || 'ヘルスチェックの実行に失敗しました（バックエンド未実装の可能性があります）。');
+      setError(err.response?.data?.error || 'ヘルスチェックの実行に失敗しました。');
     } finally {
       setHealthLoading(false);
     }
@@ -558,7 +555,7 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
               )}
             </div>
 
-            {/* 1 & 4. データベース管理 (スキーママイグレーション ＆ 履歴確認) */}
+            {/* データベース管理 (スキーママイグレーション ＆ 履歴確認) */}
             <div style={{ paddingTop: '16px', borderTop: '1px solid #e1dfdd' }}>
               <label style={{ ...styles.labelWithInfo, display: 'block', marginBottom: '8px' }}>
                 データベース管理 (スキーママイグレーション)
@@ -598,9 +595,9 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
               </div>
             </div>
 
-            {/* 3. テナントのステータス管理 (一時停止/再開) */}
+            {/* 3. テナントのステータス管理 (一時停止/再開) - 修正：色や大きさを他と同じラベルスタイルに統一 */}
             <div style={{ paddingTop: '16px', borderTop: '1px solid #e1dfdd' }}>
-              <label style={{ ...styles.labelWithInfo, display: 'block', marginBottom: '8px', color: '#a80000' }}>
+              <label style={{ ...styles.labelWithInfo, display: 'block', marginBottom: '8px' }}>
                 テナントの運用ステータス変更
               </label>
               <p style={{ fontSize: '12px', color: '#605e5c', marginBottom: '12px' }}>
