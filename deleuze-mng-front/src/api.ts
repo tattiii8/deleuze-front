@@ -134,6 +134,33 @@ export async function deleteUser(id: string | number): Promise<void> {
   await api.delete(`/users/${id}`);
 }
 
+/* ==========================================
+ *  テナント管理 (Tenants) 拡張
+ * ========================================== */
+
+/**
+ * 1. テナントのマイグレーション適用履歴を取得します
+ */
+export async function fetchTenantMigrations(tenantId: string): Promise<{ migrationName: string; appliedAt: string }[]> {
+  const response = await api.get<{ migrationName: string; appliedAt: string }[]>(`/tenants/${tenantId}/migrations`);
+  return response.data;
+}
+
+/**
+ * 3. テナントのステータス（一時停止/有効化など）を更新します
+ */
+export async function updateTenantStatus(tenantId: string, status: 'active' | 'suspended'): Promise<{ message: string }> {
+  const response = await api.patch<{ message: string }>(`/tenants/${tenantId}/status`, { status });
+  return response.data;
+}
+
+/**
+ * 4. テナントの接続・ヘルスチェック（DB・S3）を実行します
+ */
+export async function checkTenantHealth(tenantId: string): Promise<{ dbStatus: string; storageStatus: string; message: string }> {
+  const response = await api.get<{ dbStatus: string; storageStatus: string; message: string }>(`/tenants/${tenantId}/health`);
+  return response.data;
+}
 
 /**
  * 指定したテナントのデータベースマイグレーションを実行します

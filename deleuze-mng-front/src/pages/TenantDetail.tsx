@@ -1,5 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { generateApiKey, updateAuthMode, migrateTenant } from '../api';
+import { 
+  generateApiKey, 
+  updateAuthMode, 
+  migrateTenant, 
+  fetchTenantMigrations, 
+  updateTenantStatus, 
+  checkTenantHealth 
+} from '../api';
 import { Tenant } from '../types';
 
 interface TenantDetailProps {
@@ -40,24 +47,50 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
   const [actionLoading, setActionLoading] = useState<boolean>(false);
   const [migrationLoading, setMigrationLoading] = useState<boolean>(false);
 
+  // 1, 3, 4 用の状態
+  const [migrations, setMigrations] = useState<{ migrationName: string; appliedAt: string }[]>([]);
+  const [loadingMigrations, setLoadingMigrations] = useState<boolean>(false);
+  const [healthStatus, setHealthStatus] = useState<{ dbStatus: string; storageStatus: string; message: string } | null>(null);
+  const [healthLoading, setHealthLoading] = useState<boolean>(false);
+
   const initialAuthMode = (tenant as any).authMode ?? (tenant as any).AuthMode;
   const initialApiKey = (tenant as any).apiKey ?? (tenant as any).ApiKey;
+  const initialStatus = (tenant as any).status ?? 'active';
 
   const [apiKey, setApiKey] = useState<string | null>(initialApiKey || null);
   const [authMode, setAuthMode] = useState<number>(
     typeof initialAuthMode === 'number' ? initialAuthMode : 0
   );
+  const [tenantStatus, setTenantStatus] = useState<string>(initialStatus);
   const [isCopied, setIsCopied] = useState<boolean>(false);
 
   useEffect(() => {
     const currentAuthMode = (tenant as any).authMode ?? (tenant as any).AuthMode;
     const currentApiKey = (tenant as any).apiKey ?? (tenant as any).ApiKey;
+    const currentStatus = (tenant as any).status ?? 'active';
 
     if (typeof currentAuthMode === 'number') {
       setAuthMode(currentAuthMode);
     }
     setApiKey(currentApiKey || null);
+    setTenantStatus(currentStatus);
+
+    // タブ表示時にマイグレーション履歴を取得
+    loadMigrations();
   }, [tenant]);
+
+  const loadMigrations = async () => {
+    setLoadingMigrations(true);
+    try {
+      const data = await fetchTenantMigrations(tenant.tenantId);
+      setMigrations(data);
+    } catch (err) {
+      // バックエンド未実装時のフォールバックとしてエラー時は空にする
+      setMigrations([]);
+    } finally {
+      setLoadingMigrations(false);
+    }
+  };
 
   const handleEnableService = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -117,6 +150,29 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
     }
   };
 
+  // 3. テナントの一時停止/有効化切り替え
+  const handleStatusChange = async (newStatus: 'active' | 'suspended') => {
+    const actionName = newStatus === 'suspended' ? '一時停止' : '有効化';
+    if (!window.confirm(`テナント '${tenant.tenantId}' を${actionName}しますか？`)) {
+      return;
+    }
+
+    setActionLoading(true);
+    setError(null);
+    setSuccessMessage(null);
+
+    try {
+      await updateTenantStatus(tenant.tenantId, newStatus);
+      setTenantStatus(newStatus);
+      setSuccessMessage(`テナントを${actionName}しました。`);
+      await onRefresh();
+    } catch (err: any) {
+      setError(err.response?.data?.error || err.message || `テナントの${actionName}に失敗しました。`);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const handleMigrate = async () => {
     if (!window.confirm(`テナント '${tenant.tenantId}' のデータベースマイグレーションを実行しますか？`)) {
       return;
@@ -128,11 +184,28 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
 
     try {
       const res = await migrateTenant(tenant.tenantId);
-      setSuccessMessage(res.message || `テナント '${tenant.tenantId}' のマイグレーションが正常に完了しました。`);
+      setSuccessMessage(res.message || `テナント '${tenant.tenantId}' のマイグレーションが完了しました。`);
+      loadMigrations(); // 履歴を再読み込み
     } catch (err: any) {
       setError(err.response?.data?.error || err.message || 'マイグレーションの実行に失敗しました。');
     } finally {
       setMigrationLoading(false);
+    }
+  };
+
+  // 4. ヘルスチェック実行
+  const handleHealthCheck = async () => {
+    setHealthLoading(true);
+    setHealthStatus(null);
+    setError(null);
+
+    try {
+      const res = await checkTenantHealth(tenant.tenantId);
+      setHealthStatus(res);
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'ヘルスチェックの実行に失敗しました（バックエンド未実装の可能性があります）。');
+    } finally {
+      setHealthLoading(false);
     }
   };
 
@@ -144,7 +217,6 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
     }
   };
 
-  // 共通スタイルの定義
   const styles = {
     container: {
       padding: '24px 32px',
@@ -249,6 +321,17 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
       fontSize: '13px',
       cursor: 'pointer'
     },
+    dangerButton: {
+      height: '32px',
+      padding: '0 16px',
+      backgroundColor: '#a80000',
+      color: '#ffffff',
+      border: 'none',
+      borderRadius: '2px',
+      fontSize: '13px',
+      fontWeight: 600,
+      cursor: 'pointer'
+    },
     treeLine: {
       position: 'absolute' as const,
       left: '8px',
@@ -305,6 +388,17 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
           <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr', rowGap: '16px', columnGap: '12px', alignItems: 'center', marginTop: '16px' }}>
             
             <span style={styles.labelWithInfo}>
+              稼働状態 <span style={styles.infoIcon} title="テナントの稼働または一時停止">ⓘ</span>
+            </span>
+            <div>
+              {tenantStatus === 'suspended' ? (
+                <span style={{ color: '#a80000', fontWeight: 600 }}>● 一時停止中 (Suspended)</span>
+              ) : (
+                <span style={{ color: '#107c41', fontWeight: 600 }}>● 稼働中 (Active)</span>
+              )}
+            </div>
+
+            <span style={styles.labelWithInfo}>
               現在の認証方式 <span style={styles.infoIcon} title="設定されている認証モード">ⓘ</span>
             </span>
             <div style={{ fontWeight: 600 }}>{AUTH_MODE_LABELS[authMode] || '不明'}</div>
@@ -344,6 +438,30 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
             </div>
 
           </div>
+
+          {/* 4. 接続ヘルスチェックセクション */}
+          <div style={{ marginTop: '32px', paddingTop: '16px', borderTop: '1px solid #e1dfdd' }}>
+            <h3 style={styles.sectionTitle}>システム疎通確認 (ヘルスチェック)</h3>
+            <p style={{ fontSize: '12px', color: '#605e5c', marginBottom: '12px' }}>
+              テナントのデータベーススキーマおよびストレージへのアクセスが正常かテストします。
+            </p>
+            <button
+              type="button"
+              onClick={handleHealthCheck}
+              disabled={healthLoading}
+              style={styles.secondaryButton}
+            >
+              {healthLoading ? 'テスト実行中...' : '接続テストを実行'}
+            </button>
+
+            {healthStatus && (
+              <div style={{ marginTop: '12px', padding: '12px', backgroundColor: '#f3f2f1', borderRadius: '2px', fontSize: '12px' }}>
+                <div><strong>DB状態:</strong> {healthStatus.dbStatus}</div>
+                <div><strong>ストレージ状態:</strong> {healthStatus.storageStatus}</div>
+                <div><strong>メッセージ:</strong> {healthStatus.message}</div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -357,10 +475,10 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             
-            {/* 1. 認証方式 */}
+            {/* 認証方式 */}
             <div>
               <label style={{ ...styles.labelWithInfo, display: 'block', marginBottom: '8px' }}>
-                認証方式 <span style={{ color: '#a80000' }}>*</span> <span style={styles.infoIcon} title="要求する認証ヘッダーの形式">ⓘ</span>
+                認証方式 <span style={{ color: '#a80000' }}>*</span>
               </label>
               <select
                 value={authMode}
@@ -374,12 +492,12 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
               </select>
             </div>
 
-            {/* 2. API Key 管理 */}
+            {/* API Key 管理 */}
             <div style={{ position: 'relative', paddingLeft: '24px' }}>
               <div style={{ ...styles.treeLine, top: '-24px', bottom: '20px' }} />
               
               <label style={{ ...styles.labelWithInfo, display: 'block', marginBottom: '8px' }}>
-                API Key 管理 <span style={{ color: '#a80000' }}>*</span> <span style={styles.infoIcon} title="テナント専用のAPI Key">ⓘ</span>
+                API Key 管理 <span style={{ color: '#a80000' }}>*</span>
               </label>
 
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -407,10 +525,10 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
               </div>
             </div>
 
-            {/* 3. 追加サービス連携 */}
+            {/* 追加サービス有効化 */}
             <div style={{ paddingTop: '16px', borderTop: '1px solid #e1dfdd' }}>
               <label style={{ ...styles.labelWithInfo, display: 'block', marginBottom: '8px' }}>
-                追加サービス有効化 <span style={styles.infoIcon} title="新しく割り当てるサービスを選択">ⓘ</span>
+                追加サービス有効化
               </label>
 
               {unenabledServices.length > 0 ? (
@@ -440,27 +558,73 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
               )}
             </div>
 
-            {/* 4. データベース管理 (スキーママイグレーション) */}
+            {/* 1 & 4. データベース管理 (スキーママイグレーション ＆ 履歴確認) */}
             <div style={{ paddingTop: '16px', borderTop: '1px solid #e1dfdd' }}>
               <label style={{ ...styles.labelWithInfo, display: 'block', marginBottom: '8px' }}>
-                データベース管理 (スキーママイグレーション) <span style={styles.infoIcon} title="最新のSQLスクリプトを適用します">ⓘ</span>
+                データベース管理 (スキーママイグレーション)
               </label>
               <p style={{ fontSize: '12px', color: '#605e5c', marginBottom: '12px' }}>
-                このテナントのデータベース（スキーマ）に対して、未適用のマイグレーションスクリプトを適用します。
+                未適用のマイグレーションスクリプトを適用します。下部に現在の適用済み履歴が表示されます。
               </p>
-              <button
-                type="button"
-                onClick={handleMigrate}
-                disabled={migrationLoading || actionLoading}
-                style={{
-                  ...styles.secondaryButton,
-                  backgroundColor: '#f3f2f1',
-                  fontWeight: 600,
-                  borderColor: '#8a8886'
-                }}
-              >
-                {migrationLoading ? 'マイグレーション実行中...' : 'データベースのマイグレーションを実行'}
-              </button>
+              
+              <div style={{ marginBottom: '12px' }}>
+                <button
+                  type="button"
+                  onClick={handleMigrate}
+                  disabled={migrationLoading || actionLoading}
+                  style={{ ...styles.secondaryButton, fontWeight: 600 }}
+                >
+                  {migrationLoading ? 'マイグレーション実行中...' : 'データベースのマイグレーションを実行'}
+                </button>
+              </div>
+
+              {/* マイグレーション履歴一覧 */}
+              <div style={{ marginTop: '8px', padding: '12px', backgroundColor: '#faf9f8', border: '1px solid #e1dfdd', borderRadius: '2px', maxWidth: '480px' }}>
+                <div style={{ fontSize: '12px', fontWeight: 600, marginBottom: '6px', color: '#323130' }}>適用済みマイグレーション履歴:</div>
+                {loadingMigrations ? (
+                  <div style={{ fontSize: '12px', color: '#605e5c' }}>読み込み中...</div>
+                ) : migrations.length > 0 ? (
+                  <ul style={{ margin: 0, paddingLeft: '16px', fontSize: '12px', color: '#605e5c' }}>
+                    {migrations.map((m, idx) => (
+                      <li key={idx}>
+                        <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{m.migrationName}</span> 
+                        <span style={{ color: '#a19f9d', marginLeft: '8px' }}>({new Date(m.appliedAt).toLocaleString()})</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div style={{ fontSize: '12px', color: '#a19f9d' }}>履歴がありません（またはバックエンド未実装）</div>
+                )}
+              </div>
+            </div>
+
+            {/* 3. テナントのステータス管理 (一時停止/再開) */}
+            <div style={{ paddingTop: '16px', borderTop: '1px solid #e1dfdd' }}>
+              <label style={{ ...styles.labelWithInfo, display: 'block', marginBottom: '8px', color: '#a80000' }}>
+                テナントの運用ステータス変更
+              </label>
+              <p style={{ fontSize: '12px', color: '#605e5c', marginBottom: '12px' }}>
+                テナントを一時停止すると、データや設定を保持したまますべてのサービスアクセスを遮断できます。
+              </p>
+              {tenantStatus === 'suspended' ? (
+                <button
+                  type="button"
+                  onClick={() => handleStatusChange('active')}
+                  disabled={actionLoading}
+                  style={{ ...styles.primaryButton, backgroundColor: '#107c41' }}
+                >
+                  テナントを有効化 (再開) する
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => handleStatusChange('suspended')}
+                  disabled={actionLoading}
+                  style={styles.dangerButton}
+                >
+                  テナントを一時停止する
+                </button>
+              )}
             </div>
 
           </div>
