@@ -34,7 +34,7 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
  */
 export async function generateApiKey(tenantId: string): Promise<{ apiKey: string }> {
   // 👈 axios インスタンス (api) を使用
-  const response = await api.post<{ apiKey: string }>(`/tenants/${tenantId}/api-key`);
+  const response = await api.post<{ apiKey: string }>(`/tenants/${tenantId}/apikey`);
   return response.data;
 }
 
@@ -43,7 +43,7 @@ export async function generateApiKey(tenantId: string): Promise<{ apiKey: string
  */
 export async function updateAuthMode(tenantId: string, authMode: number): Promise<{ message: string; authMode: string }> {
   // 👈 axios インスタンス (api) を使用
-  const response = await api.patch<{ message: string; authMode: string }>(`/tenants/${tenantId}/auth-mode`, {
+  const response = await api.patch<{ message: string; authMode: string }>(`/tenants/${tenantId}/authmode`, {
     authMode
   });
   return response.data;
