@@ -30,7 +30,6 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  // 未有効化のサービス
   const unenabledServices = AVAILABLE_SERVICES.filter(
     (s) => !tenant.services?.includes(s.key)
   );
@@ -40,7 +39,6 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
   );
   const [actionLoading, setActionLoading] = useState<boolean>(false);
 
-  // ケース違い(authMode / AuthMode)を判定
   const initialAuthMode = (tenant as any).authMode ?? (tenant as any).AuthMode;
   const initialApiKey = (tenant as any).apiKey ?? (tenant as any).ApiKey;
 
@@ -50,7 +48,6 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
   );
   const [isCopied, setIsCopied] = useState<boolean>(false);
 
-  // 親から渡される tenant props の変更を検知してローカルステートを同期
   useEffect(() => {
     const currentAuthMode = (tenant as any).authMode ?? (tenant as any).AuthMode;
     const currentApiKey = (tenant as any).apiKey ?? (tenant as any).ApiKey;
@@ -61,7 +58,6 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
     setApiKey(currentApiKey || null);
   }, [tenant]);
 
-  // サービス有効化
   const handleEnableService = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedService) return;
@@ -82,7 +78,6 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
     }
   };
 
-  // API Key 発行
   const handleGenerateApiKey = async () => {
     if (apiKey && !window.confirm('API Key を再発行すると既存のキーは無効になります。よろしいですか？')) {
       return;
@@ -104,7 +99,6 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
     }
   };
 
-  // 認証モード変更
   const handleAuthModeChange = async (newMode: number) => {
     setActionLoading(true);
     setError(null);
@@ -130,239 +124,313 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
     }
   };
 
-  return (
-    <div style={{
-      padding: '16px',
-      maxWidth: '900px',
-      margin: '16px auto',
+  // 共通スタイルの定義
+  const styles = {
+    container: {
+      padding: '24px 32px',
+      maxWidth: '960px',
+      margin: '0 auto',
       backgroundColor: '#ffffff',
-      border: '1px solid #e1dfdd',
-      fontFamily: 'Segoe UI, sans-serif',
+      fontFamily: '"Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, "Helvetica Neue", sans-serif',
+      color: '#323130',
+      fontSize: '13px',
+      lineHeight: '1.6'
+    },
+    backButton: {
+      background: 'none',
+      border: 'none',
+      color: '#0078d4',
+      cursor: 'pointer',
+      padding: 0,
+      marginBottom: '16px',
+      fontSize: '13px',
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: '4px'
+    },
+    title: {
+      marginTop: 0,
+      marginBottom: '8px',
+      fontSize: '20px',
+      fontWeight: 600,
       color: '#1b1b1b'
-    }}>
-      <button 
-        onClick={onBack} 
-        style={{ 
-          background: 'none', 
-          border: 'none', 
-          color: '#0078d4', 
-          cursor: 'pointer', 
-          padding: 0, 
-          marginBottom: '12px',
-          fontSize: '12px',
-          fontWeight: 'bold'
-        }}
-      >
+    },
+    description: {
+      color: '#605e5c',
+      marginBottom: '20px',
+      fontSize: '13px'
+    },
+    tabBar: {
+      display: 'flex',
+      borderBottom: '1px solid #e1dfdd',
+      marginBottom: '24px'
+    },
+    tabButton: (isActive: boolean) => ({
+      padding: '8px 16px',
+      border: 'none',
+      background: 'none',
+      fontSize: '13px',
+      fontWeight: isActive ? 600 : 400,
+      color: isActive ? '#0078d4' : '#323130',
+      borderBottom: isActive ? '2px solid #0078d4' : '2px solid transparent',
+      cursor: 'pointer',
+      marginBottom: '-1px'
+    }),
+    sectionTitle: {
+      fontSize: '16px',
+      fontWeight: 600,
+      color: '#1b1b1b',
+      marginTop: 0,
+      marginBottom: '8px'
+    },
+    fieldGroup: {
+      display: 'flex',
+      flexDirection: 'column' as const,
+      gap: '16px',
+      marginTop: '16px'
+    },
+    labelWithInfo: {
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: '4px',
+      fontSize: '13px',
+      color: '#323130',
+      fontWeight: 400
+    },
+    infoIcon: {
+      color: '#605e5c',
+      fontSize: '12px',
+      cursor: 'help'
+    },
+    inputSelect: {
+      width: '100%',
+      maxWidth: '480px',
+      height: '32px',
+      padding: '0 8px',
+      border: '1px solid #605e5c',
+      borderRadius: '2px',
+      backgroundColor: '#ffffff',
+      fontSize: '13px',
+      color: '#323130',
+      outline: 'none'
+    },
+    primaryButton: {
+      height: '32px',
+      padding: '0 16px',
+      backgroundColor: '#0078d4',
+      color: '#ffffff',
+      border: 'none',
+      borderRadius: '2px',
+      fontSize: '13px',
+      fontWeight: 600,
+      cursor: 'pointer'
+    },
+    secondaryButton: {
+      height: '32px',
+      padding: '0 16px',
+      backgroundColor: '#ffffff',
+      color: '#323130',
+      border: '1px solid #8a8886',
+      borderRadius: '2px',
+      fontSize: '13px',
+      cursor: 'pointer'
+    },
+    treeLineContainer: {
+      position: 'relative' as const,
+      paddingLeft: '24px',
+      marginTop: '12px'
+    },
+    treeLine: {
+      position: 'absolute' as const,
+      left: '8px',
+      top: '-12px',
+      bottom: '16px',
+      width: '12px',
+      borderLeft: '1px solid #a19f9d',
+      borderBottom: '1px solid #a19f9d'
+    }
+  };
+
+  return (
+    <div style={styles.container}>
+      <button onClick={onBack} style={styles.backButton}>
         &larr; テナント一覧に戻る
       </button>
 
-      <h2 style={{ marginTop: 0, marginBottom: '16px', fontSize: '18px', fontWeight: 'bold' }}>
-        テナント詳細: <span style={{ fontFamily: 'monospace', color: '#0078d4' }}>{tenant.tenantId}</span>
-      </h2>
-
-      {/* タブ切り替えバー */}
-      <div style={{ display: 'flex', borderBottom: '1px solid #e1dfdd', marginBottom: '16px' }}>
+      {/* タブ切り替え */}
+      <div style={styles.tabBar}>
         <button
           onClick={() => setActiveTab('overview')}
-          style={{
-            padding: '8px 16px',
-            border: 'none',
-            background: 'none',
-            fontSize: '12px',
-            fontWeight: activeTab === 'overview' ? 'bold' : 'normal',
-            color: activeTab === 'overview' ? '#0078d4' : '#605e5c',
-            borderBottom: activeTab === 'overview' ? '2px solid #0078d4' : '2px solid transparent',
-            cursor: 'pointer',
-            marginBottom: '-1px'
-          }}
+          style={styles.tabButton(activeTab === 'overview')}
         >
-          概要
+          基本情報
         </button>
         <button
           onClick={() => setActiveTab('settings')}
-          style={{
-            padding: '8px 16px',
-            border: 'none',
-            background: 'none',
-            fontSize: '12px',
-            fontWeight: activeTab === 'settings' ? 'bold' : 'normal',
-            color: activeTab === 'settings' ? '#0078d4' : '#605e5c',
-            borderBottom: activeTab === 'settings' ? '2px solid #0078d4' : '2px solid transparent',
-            cursor: 'pointer',
-            marginBottom: '-1px'
-          }}
+          style={styles.tabButton(activeTab === 'settings')}
         >
-          構成・操作
+          構成・設定
         </button>
       </div>
 
+      <h2 style={styles.title}>テナントの詳細</h2>
+      <p style={styles.description}>
+        テナント <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{tenant.tenantId}</span> の各種設定および有効化サービスを管理します。
+      </p>
+
       {error && (
-        <div style={{ padding: '8px 12px', backgroundColor: '#fde7e9', border: '1px solid #f8d7da', color: '#a80000', fontSize: '12px', marginBottom: '16px' }}>
+        <div style={{ padding: '10px 14px', backgroundColor: '#fde7e9', border: '1px solid #f8d7da', color: '#a80000', borderRadius: '2px', marginBottom: '16px' }}>
           {error}
         </div>
       )}
       {successMessage && (
-        <div style={{ padding: '8px 12px', backgroundColor: '#dff6dd', border: '1px solid #c3e6cb', color: '#107c41', fontSize: '12px', marginBottom: '16px' }}>
+        <div style={{ padding: '10px 14px', backgroundColor: '#dff6dd', border: '1px solid #c3e6cb', color: '#107c41', borderRadius: '2px', marginBottom: '16px' }}>
           {successMessage}
         </div>
       )}
 
-      {/* タブ 1: 概要（閲覧専用） */}
+      {/* タブ 1: 基本情報（概要） */}
       {activeTab === 'overview' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <div style={{ border: '1px solid #e1dfdd', padding: '16px', backgroundColor: '#faf9f8' }}>
-            <h3 style={{ marginTop: 0, marginBottom: '12px', fontSize: '13px', fontWeight: 'bold', color: '#323130' }}>現在のステータス</h3>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '12px' }}>
-              <tbody>
-                <tr style={{ borderBottom: '1px solid #edebe9' }}>
-                  <th style={{ padding: '6px 0', width: '160px', color: '#605e5c', fontWeight: 'bold' }}>現在の認証方式</th>
-                  <td style={{ padding: '6px 0', fontWeight: 'bold' }}>{AUTH_MODE_LABELS[authMode] || '不明'}</td>
-                </tr>
-                <tr style={{ borderBottom: '1px solid #edebe9' }}>
-                  <th style={{ padding: '6px 0', color: '#605e5c', fontWeight: 'bold' }}>API Key</th>
-                  <td style={{ padding: '6px 0' }}>
-                    {apiKey ? (
-                      <span style={{ color: '#107c41', fontWeight: 'bold' }}>● 発行済み (末尾: ...{apiKey.slice(-6)})</span>
-                    ) : (
-                      <span style={{ color: '#a19f9d' }}>未発行</span>
-                    )}
-                  </td>
-                </tr>
-                <tr>
-                  <th style={{ padding: '6px 0', color: '#605e5c', fontWeight: 'bold' }}>有効化済みサービス</th>
-                  <td style={{ padding: '6px 0' }}>
-                    {tenant.services && tenant.services.length > 0 ? (
-                      <div style={{ display: 'flex', gap: '4px' }}>
-                        {tenant.services.map((s) => (
-                          <span key={s} style={{ backgroundColor: '#f3f2f1', border: '1px solid #e1dfdd', padding: '1px 6px', fontSize: '11px', color: '#323130' }}>
-                            {s}
-                          </span>
-                        ))}
-                      </div>
-                    ) : (
-                      <span style={{ color: '#a19f9d' }}>なし</span>
-                    )}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+        <div style={{ marginTop: '24px' }}>
+          <h3 style={styles.sectionTitle}>現在のステータス</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr', rowGap: '16px', columnGap: '12px', alignItems: 'center', marginTop: '16px' }}>
+            
+            <span style={styles.labelWithInfo}>
+              現在の認証方式 <span style={styles.infoIcon} title="設定されている認証モード">ⓘ</span>
+            </span>
+            <div style={{ fontWeight: 600 }}>{AUTH_MODE_LABELS[authMode] || '不明'}</div>
+
+            {/* ツリー線を使った階層表現 */}
+            <div style={{ gridColumn: '1 / -1', position: 'relative', paddingLeft: '24px' }}>
+              <div style={styles.treeLine} />
+              <div style={{ display: 'grid', gridTemplateColumns: '176px 1fr', alignItems: 'center' }}>
+                <span style={styles.labelWithInfo}>
+                  API Key ステータス <span style={styles.infoIcon} title="API Keyの有無">ⓘ</span>
+                </span>
+                <div>
+                  {apiKey ? (
+                    <span style={{ color: '#107c41', fontWeight: 600 }}>● 発行済み (末尾: ...{apiKey.slice(-6)})</span>
+                  ) : (
+                    <span style={{ color: '#a19f9d' }}>未発行</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <span style={styles.labelWithInfo}>
+              有効化済みサービス <span style={styles.infoIcon} title="利用可能なサービス">ⓘ</span>
+            </span>
+            <div>
+              {tenant.services && tenant.services.length > 0 ? (
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  {tenant.services.map((s) => (
+                    <span key={s} style={{ backgroundColor: '#f3f2f1', border: '1px solid #8a8886', padding: '2px 8px', borderRadius: '2px', fontSize: '12px' }}>
+                      {s}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <span style={{ color: '#a19f9d' }}>なし</span>
+              )}
+            </div>
+
           </div>
         </div>
       )}
 
-      {/* タブ 2: 設定変更・操作 */}
+      {/* タブ 2: 構成・設定 */}
       {activeTab === 'settings' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {/* 1. 認証方式の変更 */}
-          <div style={{ border: '1px solid #e1dfdd', padding: '16px', backgroundColor: '#faf9f8' }}>
-            <h3 style={{ marginTop: 0, marginBottom: '12px', fontSize: '13px', fontWeight: 'bold' }}>認証方式の変更</h3>
-            <div style={{ display: 'flex', gap: '16px', fontSize: '12px' }}>
-              {[
-                { label: 'JWT (Bearer) のみ', value: 0 },
-                { label: 'API Key のみ', value: 1 },
-                { label: '両方許可 (Hybrid)', value: 2 },
-              ].map((mode) => (
-                <label key={mode.value} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <input
-                    type="radio"
-                    name="authMode"
-                    value={mode.value}
-                    checked={authMode === mode.value}
-                    onChange={() => handleAuthModeChange(mode.value)}
-                    disabled={actionLoading}
-                  />
-                  {mode.label}
-                </label>
-              ))}
+        <div style={{ marginTop: '24px' }}>
+          <h3 style={styles.sectionTitle}>認証およびサービスの構成</h3>
+          <p style={styles.description}>
+            認証方式の変更や API Key のリセット、新規サービスの接続を行います。
+          </p>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            
+            {/* 1. サブスクリプション/認証方式相当 */}
+            <div>
+              <label style={{ ...styles.labelWithInfo, display: 'block', marginBottom: '8px' }}>
+                認証方式 <span style={{ color: '#a80000' }}>*</span> <span style={styles.infoIcon} title="要求する認証ヘッダーの形式">ⓘ</span>
+              </label>
+              <select
+                value={authMode}
+                onChange={(e) => handleAuthModeChange(Number(e.target.value))}
+                disabled={actionLoading}
+                style={styles.inputSelect}
+              >
+                <option value={0}>JWT (Bearer) のみ</option>
+                <option value={1}>API Key のみ</option>
+                <option value={2}>両方許可 (Hybrid)</option>
+              </select>
             </div>
-          </div>
 
-          {/* 2. API Key の発行・確認 */}
-          <div style={{ border: '1px solid #e1dfdd', padding: '16px', backgroundColor: '#faf9f8' }}>
-            <h3 style={{ marginTop: 0, marginBottom: '12px', fontSize: '13px', fontWeight: 'bold' }}>API Key の管理</h3>
-            <button 
-              onClick={handleGenerateApiKey} 
-              disabled={actionLoading}
-              style={{
-                padding: '4px 12px',
-                backgroundColor: '#0078d4',
-                color: '#ffffff',
-                border: 'none',
-                fontSize: '12px',
-                fontWeight: 'bold',
-                cursor: 'pointer'
-              }}
-            >
-              {apiKey ? 'API Key を再発行' : 'API Key を新規発行'}
-            </button>
+            {/* 2. リソースグループ/API Key相当（L字ライン接続） */}
+            <div style={{ position: 'relative', paddingLeft: '24px' }}>
+              <div style={{ ...styles.treeLine, top: '-24px', bottom: '20px' }} />
+              
+              <label style={{ ...styles.labelWithInfo, display: 'block', marginBottom: '8px' }}>
+                API Key 管理 <span style={{ color: '#a80000' }}>*</span> <span style={styles.infoIcon} title="テナント専用のAPI Key">ⓘ</span>
+              </label>
 
-            {apiKey && (
-              <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <input
-                  type="text"
-                  readOnly
-                  value={apiKey}
-                  style={{ 
-                    flex: 1, 
-                    fontFamily: 'monospace', 
-                    padding: '4px 8px', 
-                    border: '1px solid #8a8886',
-                    backgroundColor: '#ffffff',
-                    fontSize: '12px'
-                  }}
-                />
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                 <button 
-                  onClick={handleCopyApiKey}
-                  style={{
-                    padding: '4px 12px',
-                    backgroundColor: '#ffffff',
-                    border: '1px solid #8a8886',
-                    fontSize: '12px',
-                    cursor: 'pointer'
-                  }}
-                >
-                  {isCopied ? 'コピー完了' : 'コピー'}
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* 3. 追加サービス有効化 */}
-          <div style={{ border: '1px solid #e1dfdd', padding: '16px', backgroundColor: '#faf9f8' }}>
-            <h3 style={{ marginTop: 0, marginBottom: '12px', fontSize: '13px', fontWeight: 'bold' }}>追加サービス有効化</h3>
-            {unenabledServices.length > 0 ? (
-              <form onSubmit={handleEnableService} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <select
-                  value={selectedService}
-                  onChange={(e) => setSelectedService(e.target.value)}
+                  onClick={handleGenerateApiKey} 
                   disabled={actionLoading}
-                  style={{ padding: '4px 8px', border: '1px solid #8a8886', minWidth: '220px', fontSize: '12px' }}
+                  style={styles.primaryButton}
                 >
-                  {unenabledServices.map((s) => (
-                    <option key={s.key} value={s.key}>
-                      {s.label}
-                    </option>
-                  ))}
-                </select>
-                <button 
-                  type="submit" 
-                  disabled={actionLoading || !selectedService}
-                  style={{
-                    padding: '4px 12px',
-                    backgroundColor: '#107c41',
-                    color: '#ffffff',
-                    border: 'none',
-                    fontSize: '12px',
-                    fontWeight: 'bold',
-                    cursor: 'pointer'
-                  }}
-                >
-                  有効化
+                  {apiKey ? 'API Key を再発行' : 'API Key を新規発行'}
                 </button>
-              </form>
-            ) : (
-              <p style={{ margin: 0, color: '#605e5c', fontSize: '12px' }}>追加可能なサービスはすべて有効化されています。</p>
-            )}
+
+                {apiKey && (
+                  <div style={{ display: 'flex', gap: '8px', width: '100%', maxWidth: '480px', marginTop: '8px' }}>
+                    <input
+                      type="text"
+                      readOnly
+                      value={apiKey}
+                      style={{ ...styles.inputSelect, flex: 1, fontFamily: 'monospace' }}
+                    />
+                    <button onClick={handleCopyApiKey} style={styles.secondaryButton}>
+                      {isCopied ? 'コピー完了' : 'コピー'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* 3. 追加サービス連携 */}
+            <div style={{ paddingTop: '16px', borderTop: '1px solid #e1dfdd' }}>
+              <label style={{ ...styles.labelWithInfo, display: 'block', marginBottom: '8px' }}>
+                追加サービス有効化 <span style={styles.infoIcon} title="新しく割り当てるサービスを選択">ⓘ</span>
+              </label>
+
+              {unenabledServices.length > 0 ? (
+                <form onSubmit={handleEnableService} style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                  <select
+                    value={selectedService}
+                    onChange={(e) => setSelectedService(e.target.value)}
+                    disabled={actionLoading}
+                    style={styles.inputSelect}
+                  >
+                    {unenabledServices.map((s) => (
+                      <option key={s.key} value={s.key}>
+                        {s.label}
+                      </option>
+                    ))}
+                  </select>
+                  <button 
+                    type="submit" 
+                    disabled={actionLoading || !selectedService}
+                    style={{ ...styles.primaryButton, backgroundColor: '#107c41' }}
+                  >
+                    有効化
+                  </button>
+                </form>
+              ) : (
+                <p style={{ margin: 0, color: '#605e5c' }}>追加可能なサービスはすべて有効化されています。</p>
+              )}
+            </div>
+
           </div>
         </div>
       )}
