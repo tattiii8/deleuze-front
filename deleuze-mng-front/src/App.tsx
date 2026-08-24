@@ -14,15 +14,50 @@ import {
 } from './api';
 import { Tenant, User } from './types';
 
+// URLのハッシュ（例: #tenants/flaubert や #users）を解析するヘルパー
+const parseHash = () => {
+  const hash = window.location.hash.replace(/^#\/?/, '');
+  const parts = hash.split('/');
+  const tab = parts[0] === 'users' ? 'users' : 'tenants';
+  const tenantId = parts[0] === 'tenants' && parts[1] ? decodeURIComponent(parts[1]) : null;
+  return { tab, tenantId };
+};
+
 export const App: React.FC = () => {
-  const [currentTab, setCurrentTab] = useState<'tenants' | 'users'>('tenants');
+  // 💡 1. 初期表示時に URL ハッシュから復元
+  const initialRoute = parseHash();
+  const [currentTab, setCurrentTab] = useState<'tenants' | 'users'>(initialRoute.tab as 'tenants' | 'users');
+  const [selectedTenantId, setSelectedTenantId] = useState<string | null>(initialRoute.tenantId);
+
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [users, setUsers] = useState<User[]>([]);
-  const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  // テナント一覧の取得 & 選択中テナントのデータ同期
+  // 💡 2. 状態（currentTab / selectedTenantId）が変わったら URL ハッシュを更新
+  useEffect(() => {
+    if (currentTab === 'users') {
+      window.location.hash = '#/users';
+    } else if (selectedTenantId) {
+      window.location.hash = `#/tenants/${encodeURIComponent(selectedTenantId)}`;
+    } else {
+      window.location.hash = '#/tenants';
+    }
+  }, [currentTab, selectedTenantId]);
+
+  // 💡 3. ブラウザの「戻る・進む」ボタンや手入力されたハッシュ変更の検知
+  useEffect(() => {
+    const handleHashChange = () => {
+      const { tab, tenantId } = parseHash();
+      setCurrentTab(tab as 'tenants' | 'users');
+      setSelectedTenantId(tenantId);
+    };
+
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
+  // データ取得ロジック
   const loadTenants = async () => {
     try {
       setLoading(true);
@@ -35,14 +70,13 @@ export const App: React.FC = () => {
     }
   };
 
-  // ユーザー一覧の取得
   const loadUsers = async () => {
     try {
       setLoading(true);
       const data = await fetchUsers();
       setUsers(data);
     } catch (err: any) {
-      setError(err.message || 'ユーザー一覧の取得に失敗しました。');
+      setError(err.message || 'ユーザー一覧の取得に失敗しました。 Failure');
     } finally {
       setLoading(false);
     }
@@ -56,13 +90,12 @@ export const App: React.FC = () => {
     }
   }, [currentTab]);
 
-  // テナント作成ハンドラー
+  // ハンドラー関係
   const handleCreateTenant = async (payload: { tenantId: string; name?: string; services?: string[] }) => {
     await createTenant(payload);
     await loadTenants();
   };
 
-  // テナント削除ハンドラー
   const handleDeleteTenant = async (tenantId: string) => {
     await deleteTenant(tenantId);
     if (selectedTenantId === tenantId) {
@@ -71,46 +104,55 @@ export const App: React.FC = () => {
     await loadTenants();
   };
 
-  // サービス追加ハンドラー
   const handleAddService = async (tenantId: string, serviceKey: string) => {
     await enableService(tenantId, serviceKey);
     await loadTenants();
   };
 
-  // ユーザー作成ハンドラー
   const handleRegisterUser = async (payload: { loginId: string; password: string; tenantId: string }) => {
     await registerUser(payload);
     await loadUsers();
   };
 
-  // ユーザー削除ハンドラー
   const handleDeleteUser = async (id: string | number) => {
     await deleteUser(id);
     await loadUsers();
   };
 
-  // 現在選択されているテナントの最新オブジェクトを取得
   const selectedTenant = tenants.find((t) => t.tenantId === selectedTenantId) || null;
 
   return (
     <div style={{ 
       height: '100vh', 
-      overflowY: 'auto', // 👈 ここで全体をスクロール可能にする
+      overflowY: 'auto', 
       backgroundColor: '#f4f6f8',
       boxSizing: 'border-box' 
     }}>
-      <Header currentTab={currentTab} onSelectTab={setCurrentTab} />
+      <Header 
+        currentTab={currentTab} 
+        onSelectTab={(tab) => {
+          setCurrentTab(tab);
+          if (tab === 'users') setSelectedTenantId(null);
+        }} 
+      />
 
-      <main style={{ padding: '20px', paddingBottom: '80px' }}> {/* 👈 下部に見切れ防止の余白を確保 */}
+      <main style={{ padding: '20px', paddingBottom: '80px' }}>
         {currentTab === 'tenants' && (
           <>
-            {selectedTenant ? (
-              <TenantDetail
-                tenant={selectedTenant}
-                onBack={() => setSelectedTenantId(null)}
-                onAddService={handleAddService}
-                onRefresh={loadTenants}
-              />
+            {selectedTenantId ? (
+              // APIレスポンス待ちで selectedTenant がまだ見つからない間もIDを維持
+              selectedTenant ? (
+                <TenantDetail
+                  tenant={selectedTenant}
+                  onBack={() => setSelectedTenantId(null)}
+                  onAddService={handleAddService}
+                  onRefresh={loadTenants}
+                />
+              ) : (
+                <div style={{ padding: '20px', fontSize: '13px', color: '#605e5c' }}>
+                  テナント情報を読み込み中...
+                </div>
+              )
             ) : (
               <TenantManagement
                 tenants={tenants}
