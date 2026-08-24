@@ -18,6 +18,7 @@ interface TenantDetailProps {
 
 const AVAILABLE_SERVICES = [
   { key: 'drive', label: 'Drive (ファイルストレージ)' },
+  // 例: 将来サービスが増えた場合もここに追加するだけで自動でタブが増えます
 ];
 
 const AUTH_MODE_LABELS: Record<number, string> = {
@@ -34,6 +35,9 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'settings'>('overview');
   
+  // 💡 サービスごとのマイグレーション履歴タブの選択状態
+  const [activeMigrationService, setActiveMigrationService] = useState<string>(AVAILABLE_SERVICES[0]?.key || 'drive');
+
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -47,7 +51,6 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
   const [actionLoading, setActionLoading] = useState<boolean>(false);
   const [migrationLoading, setMigrationLoading] = useState<boolean>(false);
 
-  // 1, 3, 4 用の状態（serviceKey をオプションで持てるように対応）
   const [migrations, setMigrations] = useState<{ serviceKey?: string; migrationName: string; appliedAt: string }[]>([]);
   const [loadingMigrations, setLoadingMigrations] = useState<boolean>(false);
   const [healthStatus, setHealthStatus] = useState<{ dbStatus: string; storageStatus: string; message: string } | null>(null);
@@ -264,6 +267,24 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
       cursor: 'pointer',
       marginBottom: '-1px'
     }),
+    // 💡 サブタブ（マイグレーション履歴用）のスタイル
+    subTabBar: {
+      display: 'flex',
+      gap: '8px',
+      marginBottom: '12px',
+      borderBottom: '1px solid #e1dfdd',
+      paddingBottom: '8px'
+    },
+    subTabButton: (isActive: boolean) => ({
+      padding: '4px 12px',
+      border: isActive ? '1px solid #0078d4' : '1px solid #8a8886',
+      borderRadius: '2px',
+      background: isActive ? '#eff6fc' : '#ffffff',
+      fontSize: '12px',
+      fontWeight: isActive ? 600 : 400,
+      color: isActive ? '#0078d4' : '#323130',
+      cursor: 'pointer'
+    }),
     sectionTitle: {
       fontSize: '16px',
       fontWeight: 600,
@@ -345,7 +366,7 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
         &larr; テナント一覧に戻る
       </button>
 
-      {/* タブ切り替え */}
+      {/* メインタブ切り替え */}
       <div style={styles.tabBar}>
         <button
           onClick={() => setActiveTab('overview')}
@@ -554,13 +575,13 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
               )}
             </div>
 
-            {/* データベース管理 (サービスごとのカード形式によるマイグレーション履歴) */}
+            {/* データベース管理 (サービスごとのタブ切り替えによるマイグレーション履歴) */}
             <div style={{ paddingTop: '16px', borderTop: '1px solid #e1dfdd' }}>
               <label style={{ ...styles.labelWithInfo, display: 'block', marginBottom: '8px' }}>
                 データベース管理 (スキーママイグレーション)
               </label>
               <p style={{ fontSize: '12px', color: '#605e5c', marginBottom: '12px' }}>
-                未適用のマイグレーションスクリプトを適用します。サービスごとの適用済み履歴を以下で確認できます。
+                未適用のマイグレーションスクリプトを適用します。サービスごとの適用済み履歴をタブで切り替えて確認できます。
               </p>
               
               <div style={{ marginBottom: '16px' }}>
@@ -574,41 +595,42 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
                 </button>
               </div>
 
-              {/* サービスごとにカードを分けたマイグレーション履歴一覧 */}
-              {loadingMigrations ? (
-                <div style={{ fontSize: '12px', color: '#605e5c' }}>履歴を読み込み中...</div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxWidth: '540px' }}>
-                  {AVAILABLE_SERVICES.map((service) => {
-                    // フォールバックとして serviceKey が無い場合は 'drive' として扱う
-                    const serviceMigrations = migrations.filter((m) => (m.serviceKey || 'drive') === service.key);
-                    
-                    return (
-                      <div key={service.key} style={{ padding: '12px', backgroundColor: '#faf9f8', border: '1px solid #e1dfdd', borderRadius: '2px' }}>
-                        <div style={{ fontSize: '13px', fontWeight: 600, marginBottom: '8px', color: '#323130', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <span>{service.label} のマイグレーション履歴</span>
-                          <span style={{ fontSize: '11px', backgroundColor: '#f3f2f1', padding: '2px 6px', borderRadius: '2px', border: '1px solid #8a8886' }}>
-                            {service.key}
-                          </span>
-                        </div>
-
-                        {serviceMigrations.length > 0 ? (
-                          <ul style={{ margin: 0, paddingLeft: '16px', fontSize: '12px', color: '#605e5c' }}>
-                            {serviceMigrations.map((m, idx) => (
-                              <li key={idx} style={{ marginBottom: '4px' }}>
-                                <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{m.migrationName}</span> 
-                                <span style={{ color: '#a19f9d', marginLeft: '8px' }}>({new Date(m.appliedAt).toLocaleString()})</span>
-                              </li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <div style={{ fontSize: '12px', color: '#a19f9d' }}>適用済みの履歴はありません（未有効化または未実行）</div>
-                        )}
-                      </div>
-                    );
-                  })}
+              {/* 💡 サービスごとのサブタブ切り替えUI */}
+              <div style={{ maxWidth: '540px' }}>
+                <div style={styles.subTabBar}>
+                  {AVAILABLE_SERVICES.map((service) => (
+                    <button
+                      key={service.key}
+                      onClick={() => setActiveMigrationService(service.key)}
+                      style={styles.subTabButton(activeMigrationService === service.key)}
+                    >
+                      {service.label}
+                    </button>
+                  ))}
                 </div>
-              )}
+
+                {/* 選択中のサービスのマイグレーション履歴を表示 */}
+                <div style={{ padding: '12px', backgroundColor: '#faf9f8', border: '1px solid #e1dfdd', borderRadius: '2px' }}>
+                  {loadingMigrations ? (
+                    <div style={{ fontSize: '12px', color: '#605e5c' }}>履歴を読み込み中...</div>
+                  ) : (() => {
+                    const filteredMigrations = migrations.filter((m) => (m.serviceKey || 'drive') === activeMigrationService);
+                    
+                    return filteredMigrations.length > 0 ? (
+                      <ul style={{ margin: 0, paddingLeft: '16px', fontSize: '12px', color: '#605e5c' }}>
+                        {filteredMigrations.map((m, idx) => (
+                          <li key={idx} style={{ marginBottom: '4px' }}>
+                            <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{m.migrationName}</span> 
+                            <span style={{ color: '#a19f9d', marginLeft: '8px' }}>({new Date(m.appliedAt).toLocaleString()})</span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <div style={{ fontSize: '12px', color: '#a19f9d' }}>適用済みの履歴はありません（未有効化または未実行）</div>
+                    );
+                  })()}
+                </div>
+              </div>
             </div>
 
             {/* テナントの運用ステータス変更 */}
