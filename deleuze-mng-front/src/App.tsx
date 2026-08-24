@@ -126,7 +126,11 @@ export const App: React.FC = () => {
       height: '100vh', 
       overflowY: 'auto', 
       backgroundColor: '#f4f6f8',
-      boxSizing: 'border-box' 
+      boxSizing: 'border-box',
+      // 👇 フォントの変更と全体的な文字サイズを 12px に縮小
+      fontFamily: '"Segoe UI", -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Meiryo", sans-serif',
+      fontSize: '12px',
+      color: '#323130'
     }}>
       <Header 
         currentTab={currentTab} 
@@ -149,7 +153,7 @@ export const App: React.FC = () => {
                   onRefresh={loadTenants}
                 />
               ) : (
-                <div style={{ padding: '20px', fontSize: '13px', color: '#605e5c' }}>
+                <div style={{ padding: '20px', fontSize: '12px', color: '#605e5c' }}>
                   テナント情報を読み込み中...
                 </div>
               )
