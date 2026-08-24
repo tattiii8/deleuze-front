@@ -485,9 +485,6 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
       {activeTab === 'settings' && (
         <div style={{ marginTop: '24px' }}>
           <h3 style={styles.sectionTitle}>認証およびサービスの構成</h3>
-          <p style={{ color: '#605e5c', marginBottom: '20px', fontSize: '13px' }}>
-            認証方式の変更や API Key のリセット、新規サービスの接続を行います。
-          </p>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             
@@ -579,9 +576,6 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
               <label style={{ ...styles.labelWithInfo, display: 'block', marginBottom: '8px' }}>
                 データベース管理 (スキーママイグレーション)
               </label>
-              <p style={{ fontSize: '12px', color: '#605e5c', marginBottom: '12px' }}>
-                未適用のマイグレーションスクリプトを適用します。サービスごとの適用済み履歴をタブで切り替えて確認できます。
-              </p>
               
               <div style={{ marginBottom: '16px' }}>
                 <button
@@ -644,9 +638,6 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
               <label style={{ ...styles.labelWithInfo, display: 'block', marginBottom: '8px' }}>
                 テナントの運用ステータス変更
               </label>
-              <p style={{ fontSize: '12px', color: '#605e5c', marginBottom: '12px' }}>
-                テナントを一時停止すると、データや設定を保持したまますべてのサービスアクセスを遮断できます。
-              </p>
               {tenantStatus === 'suspended' ? (
                 <button
                   type="button"
