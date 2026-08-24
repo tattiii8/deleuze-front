@@ -609,7 +609,14 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
                 </div>
 
                 {/* 選択中のサービスのマイグレーション履歴を表示 */}
-                <div style={{ padding: '12px', backgroundColor: '#faf9f8', border: '1px solid #e1dfdd', borderRadius: '2px' }}>
+                <div style={{ 
+                  padding: '12px', 
+                  backgroundColor: '#faf9f8', 
+                  border: '1px solid #e1dfdd', 
+                  borderRadius: '2px',
+                  maxHeight: '160px',       // 👈 最大の高さを指定（お好みで調整可能）
+                  overflowY: 'auto'         // 👈 高さを超えた場合にスクロールバーを表示
+                }}>
                   {loadingMigrations ? (
                     <div style={{ fontSize: '12px', color: '#605e5c' }}>履歴を読み込み中...</div>
                   ) : (() => {
