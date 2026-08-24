@@ -18,7 +18,6 @@ interface TenantDetailProps {
 
 const AVAILABLE_SERVICES = [
   { key: 'drive', label: 'Drive (ファイルストレージ)' },
-  // 例: 将来サービスが増えた場合もここに追加するだけで自動でタブが増えます
 ];
 
 const AUTH_MODE_LABELS: Record<number, string> = {
@@ -35,7 +34,7 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'settings'>('overview');
   
-  // 💡 サービスごとのマイグレーション履歴タブの選択状態
+  // サービスごとのマイグレーション履歴タブの選択状態
   const [activeMigrationService, setActiveMigrationService] = useState<string>(AVAILABLE_SERVICES[0]?.key || 'drive');
 
   const [error, setError] = useState<string | null>(null);
@@ -267,23 +266,22 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
       cursor: 'pointer',
       marginBottom: '-1px'
     }),
-    // 💡 サブタブ（マイグレーション履歴用）のスタイル
     subTabBar: {
       display: 'flex',
-      gap: '8px',
-      marginBottom: '12px',
+      gap: '24px',
       borderBottom: '1px solid #e1dfdd',
-      paddingBottom: '8px'
+      marginBottom: '12px'
     },
     subTabButton: (isActive: boolean) => ({
-      padding: '4px 12px',
-      border: isActive ? '1px solid #0078d4' : '1px solid #8a8886',
-      borderRadius: '2px',
-      background: isActive ? '#eff6fc' : '#ffffff',
-      fontSize: '12px',
+      background: 'none',
+      border: 'none',
+      padding: '4px 0 8px 0',
+      fontSize: '13px',
       fontWeight: isActive ? 600 : 400,
       color: isActive ? '#0078d4' : '#323130',
-      cursor: 'pointer'
+      cursor: 'pointer',
+      position: 'relative' as const,
+      boxShadow: isActive ? 'inset 0 -2px 0 0 #0078d4' : 'none', // 👈 修正箇所：常に文字列を指定
     }),
     sectionTitle: {
       fontSize: '16px',
@@ -486,7 +484,7 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
       {activeTab === 'settings' && (
         <div style={{ marginTop: '24px' }}>
           <h3 style={styles.sectionTitle}>認証およびサービスの構成</h3>
-          <p style={styles.description}>
+          <p style={{ color: '#605e5c', marginBottom: '20px', fontSize: '13px' }}>
             認証方式の変更や API Key のリセット、新規サービスの接続を行います。
           </p>
 
@@ -575,7 +573,7 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
               )}
             </div>
 
-            {/* データベース管理 (サービスごとのタブ切り替えによるマイグレーション履歴) */}
+            {/* データベース管理 (Azure Portal風のテキストタブ切り替え) */}
             <div style={{ paddingTop: '16px', borderTop: '1px solid #e1dfdd' }}>
               <label style={{ ...styles.labelWithInfo, display: 'block', marginBottom: '8px' }}>
                 データベース管理 (スキーママイグレーション)
@@ -595,7 +593,7 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
                 </button>
               </div>
 
-              {/* 💡 サービスごとのサブタブ切り替えUI */}
+              {/* サービスごとのテキストサブタブUI */}
               <div style={{ maxWidth: '540px' }}>
                 <div style={styles.subTabBar}>
                   {AVAILABLE_SERVICES.map((service) => (
