@@ -17,7 +17,8 @@ interface TenantDetailProps {
 }
 
 const AVAILABLE_SERVICES = [
-  { key: 'drive', label: 'Drive (ファイルストレージ)' },
+  { key: 'drive', label: 'Drive' },
+  { key: 'function', label: 'Function' },
 ];
 
 const AUTH_MODE_LABELS: Record<number, string> = {
