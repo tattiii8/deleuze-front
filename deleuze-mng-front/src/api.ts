@@ -165,8 +165,14 @@ export async function checkTenantHealth(tenantId: string): Promise<{ dbStatus: s
 /**
  * 指定したテナントのデータベースマイグレーションを実行します
  */
-export async function migrateTenant(tenantId: string): Promise<{ message: string }> {
-  const response = await api.post<{ message: string }>(`/tenants/${tenantId}/migrate`);
+export async function migrateTenant(
+  tenantId: string,
+  serviceKey: string
+): Promise<{ message: string }> {
+  const response = await api.post<{ message: string }>(
+    `/tenants/${tenantId}/migrate/${serviceKey}`
+  );
+
   return response.data;
 }
 

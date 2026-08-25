@@ -174,23 +174,45 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
   };
 
   const handleMigrate = async () => {
-    if (!window.confirm(`テナント '${tenant.tenantId}' のデータベースマイグレーションを実行しますか？`)) {
-      return;
-    }
+  const service = AVAILABLE_SERVICES.find(
+    (s) => s.key === activeMigrationService
+  );
 
-    setMigrationLoading(true);
-    setError(null);
-    setSuccessMessage(null);
+  const serviceLabel = service?.label || activeMigrationService;
 
-    try {
-      const res = await migrateTenant(tenant.tenantId);
-      setSuccessMessage(res.message || `テナント '${tenant.tenantId}' のマイグレーションが完了しました。`);
-      loadMigrations();
-    } catch (err: any) {
-      setError(err.response?.data?.error || err.message || 'マイグレーションの実行に失敗しました。');
-    } finally {
-      setMigrationLoading(false);
-    }
+  if (
+    !window.confirm(
+      `テナント '${tenant.tenantId}' の ${serviceLabel} サービスのデータベースマイグレーションを実行しますか？`
+    )
+  ) {
+    return;
+  }
+
+  setMigrationLoading(true);
+  setError(null);
+  setSuccessMessage(null);
+
+  try {
+    const res = await migrateTenant(
+      tenant.tenantId,
+      activeMigrationService
+    );
+
+    setSuccessMessage(
+      res.message ||
+        `テナント '${tenant.tenantId}' の ${serviceLabel} のマイグレーションが完了しました。`
+    );
+
+    await loadMigrations();
+  } catch (err: any) {
+    setError(
+      err.response?.data?.error ||
+      err.message ||
+      `${serviceLabel} のマイグレーションの実行に失敗しました。`
+    );
+  } finally {
+    setMigrationLoading(false);
+  }
   };
 
   const handleHealthCheck = async () => {
