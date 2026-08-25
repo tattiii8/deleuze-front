@@ -593,7 +593,7 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
               }}
             >
               <span style={styles.managementItemLabel}>
-                稼働状態
+                ライセンス状況
                 <span
                   style={styles.infoIcon}
                   title="テナントの稼働または一時停止"
@@ -1227,7 +1227,7 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
               <label
                 style={styles.managementItemLabel}
               >
-                現在の運用ステータス
+                ライセンス状況
               </label>
 
               <div>
