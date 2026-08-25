@@ -18,6 +18,7 @@ interface TenantDetailProps {
 }
 
 const AVAILABLE_SERVICES = [
+  { key: 'auth', label: 'Auth' },
   { key: 'drive', label: 'Drive' },
   { key: 'function', label: 'Function' },
 ];
