@@ -4,6 +4,7 @@ import {
   updateAuthMode,
   migrateTenant,
   fetchTenantMigrations,
+  fetchTenantStatus,
   updateTenantStatus,
   checkTenantHealth
 } from '../api';
@@ -33,7 +34,9 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
   onAddService,
   onRefresh
 }) => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'settings'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'settings'>(
+    'overview'
+  );
 
   // サービスごとのマイグレーション履歴タブの選択状態
   const [activeMigrationService, setActiveMigrationService] = useState<string>(
@@ -70,7 +73,6 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
 
   const initialAuthMode = (tenant as any).authMode ?? (tenant as any).AuthMode;
   const initialApiKey = (tenant as any).apiKey ?? (tenant as any).ApiKey;
-  const initialStatus = (tenant as any).status ?? 'active';
 
   const [apiKey, setApiKey] = useState<string | null>(
     initialApiKey || null
@@ -80,9 +82,44 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
     typeof initialAuthMode === 'number' ? initialAuthMode : 0
   );
 
-  const [tenantStatus, setTenantStatus] = useState<string>(initialStatus);
+  /*
+   * テナントステータス
+   *
+   * TenantInfo からではなく、
+   * GET /api/mng/tenants/{tenantId}/status
+   * で取得する。
+   */
+  const [tenantStatus, setTenantStatus] = useState<
+    'active' | 'suspended'
+  >('active');
+
   const [isCopied, setIsCopied] = useState<boolean>(false);
 
+  /**
+   * テナントの現在のステータスを取得
+   */
+  const loadTenantStatus = async () => {
+    try {
+      const data = await fetchTenantStatus(tenant.tenantId);
+
+      if (data.status === 'active' || data.status === 'suspended') {
+        setTenantStatus(data.status);
+      }
+    } catch (err) {
+      console.error(
+        'テナントステータスの取得に失敗しました。',
+        err
+      );
+
+      setError(
+        'テナントのステータス取得に失敗しました。'
+      );
+    }
+  };
+
+  /**
+   * テナント情報が変更されたときに各種情報を再取得
+   */
   useEffect(() => {
     const currentAuthMode =
       (tenant as any).authMode ?? (tenant as any).AuthMode;
@@ -90,19 +127,21 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
     const currentApiKey =
       (tenant as any).apiKey ?? (tenant as any).ApiKey;
 
-    const currentStatus =
-      (tenant as any).status ?? 'active';
-
     if (typeof currentAuthMode === 'number') {
       setAuthMode(currentAuthMode);
     }
 
     setApiKey(currentApiKey || null);
-    setTenantStatus(currentStatus);
 
+    loadTenantStatus();
     loadMigrations();
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenant]);
 
+  /**
+   * マイグレーション履歴を取得
+   */
   const loadMigrations = async () => {
     setLoadingMigrations(true);
 
@@ -116,6 +155,9 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
     }
   };
 
+  /**
+   * サービスを有効化
+   */
   const handleEnableService = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -126,7 +168,10 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
     setSuccessMessage(null);
 
     try {
-      await onAddService(tenant.tenantId, selectedService);
+      await onAddService(
+        tenant.tenantId,
+        selectedService
+      );
 
       setSuccessMessage(
         `サービス '${selectedService}' を有効化しました。`
@@ -136,16 +181,22 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
         (s) => s.key !== selectedService
       );
 
-      setSelectedService(updatedUnenabled[0]?.key || '');
+      setSelectedService(
+        updatedUnenabled[0]?.key || ''
+      );
     } catch (err: any) {
       setError(
-        err.message || 'サービスの有効化に失敗しました。'
+        err.message ||
+          'サービスの有効化に失敗しました。'
       );
     } finally {
       setActionLoading(false);
     }
   };
 
+  /**
+   * API Key を発行
+   */
   const handleGenerateApiKey = async () => {
     if (
       apiKey &&
@@ -161,7 +212,9 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
     setSuccessMessage(null);
 
     try {
-      const res = await generateApiKey(tenant.tenantId);
+      const res = await generateApiKey(
+        tenant.tenantId
+      );
 
       setApiKey(res.apiKey);
 
@@ -172,40 +225,57 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
       await onRefresh();
     } catch (err: any) {
       setError(
-        err.message || 'API Key の発行に失敗しました。'
+        err.message ||
+          'API Key の発行に失敗しました。'
       );
     } finally {
       setActionLoading(false);
     }
   };
 
-  const handleAuthModeChange = async (newMode: number) => {
+  /**
+   * 認証モード変更
+   */
+  const handleAuthModeChange = async (
+    newMode: number
+  ) => {
     setActionLoading(true);
     setError(null);
     setSuccessMessage(null);
 
     try {
-      await updateAuthMode(tenant.tenantId, newMode);
+      await updateAuthMode(
+        tenant.tenantId,
+        newMode
+      );
 
       setAuthMode(newMode);
 
-      setSuccessMessage('認証モードを更新しました。');
+      setSuccessMessage(
+        '認証モードを更新しました。'
+      );
 
       await onRefresh();
     } catch (err: any) {
       setError(
-        err.message || '認証モードの更新に失敗しました。'
+        err.message ||
+          '認証モードの更新に失敗しました。'
       );
     } finally {
       setActionLoading(false);
     }
   };
 
+  /**
+   * テナントステータス変更
+   */
   const handleStatusChange = async (
     newStatus: 'active' | 'suspended'
   ) => {
     const actionName =
-      newStatus === 'suspended' ? '一時停止' : '有効化';
+      newStatus === 'suspended'
+        ? '一時停止'
+        : '有効化';
 
     if (
       !window.confirm(
@@ -225,7 +295,11 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
         newStatus
       );
 
-      setTenantStatus(newStatus);
+      /*
+       * PATCH の結果をそのまま信用するのではなく、
+       * GET /status でDB上の最新状態を取得する。
+       */
+      await loadTenantStatus();
 
       setSuccessMessage(
         `テナントを${actionName}しました。`
@@ -243,13 +317,18 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
     }
   };
 
+  /**
+   * マイグレーション実行
+   */
   const handleMigrate = async () => {
     const service = AVAILABLE_SERVICES.find(
-      (s) => s.key === activeMigrationService
+      (s) =>
+        s.key === activeMigrationService
     );
 
     const serviceLabel =
-      service?.label || activeMigrationService;
+      service?.label ||
+      activeMigrationService;
 
     if (
       !window.confirm(
@@ -286,6 +365,9 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
     }
   };
 
+  /**
+   * ヘルスチェック
+   */
   const handleHealthCheck = async () => {
     setHealthLoading(true);
     setHealthStatus(null);
@@ -307,13 +389,19 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
     }
   };
 
+  /**
+   * API Key コピー
+   */
   const handleCopyApiKey = () => {
     if (apiKey) {
       navigator.clipboard.writeText(apiKey);
 
       setIsCopied(true);
 
-      setTimeout(() => setIsCopied(false), 2000);
+      setTimeout(
+        () => setIsCopied(false),
+        2000
+      );
     }
   };
 
@@ -507,7 +595,9 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
       {/* メインタブ切り替え */}
       <div style={styles.tabBar}>
         <button
-          onClick={() => setActiveTab('overview')}
+          onClick={() =>
+            setActiveTab('overview')
+          }
           style={styles.tabButton(
             activeTab === 'overview'
           )}
@@ -516,7 +606,9 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
         </button>
 
         <button
-          onClick={() => setActiveTab('settings')}
+          onClick={() =>
+            setActiveTab('settings')
+          }
           style={styles.tabButton(
             activeTab === 'settings'
           )}
@@ -579,7 +671,11 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
         <div style={styles.sectionContainer}>
           {/* 現在のステータス */}
           <div style={styles.managementSection}>
-            <h3 style={styles.managementSectionTitle}>
+            <h3
+              style={
+                styles.managementSectionTitle
+              }
+            >
               現在のステータス
             </h3>
 
@@ -592,7 +688,11 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
                 alignItems: 'center'
               }}
             >
-              <span style={styles.managementItemLabel}>
+              <span
+                style={
+                  styles.managementItemLabel
+                }
+              >
                 ライセンス状況
                 <span
                   style={styles.infoIcon}
@@ -603,7 +703,8 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
               </span>
 
               <div>
-                {tenantStatus === 'suspended' ? (
+                {tenantStatus ===
+                'suspended' ? (
                   <span
                     style={{
                       color: '#a80000',
@@ -624,7 +725,11 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
                 )}
               </div>
 
-              <span style={styles.managementItemLabel}>
+              <span
+                style={
+                  styles.managementItemLabel
+                }
+              >
                 現在の認証方式
                 <span
                   style={styles.infoIcon}
@@ -634,11 +739,20 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
                 </span>
               </span>
 
-              <div style={{ fontWeight: 600 }}>
-                {AUTH_MODE_LABELS[authMode] || '不明'}
+              <div
+                style={{
+                  fontWeight: 600
+                }}
+              >
+                {AUTH_MODE_LABELS[authMode] ||
+                  '不明'}
               </div>
 
-              <span style={styles.managementItemLabel}>
+              <span
+                style={
+                  styles.managementItemLabel
+                }
+              >
                 API Key ステータス
                 <span
                   style={styles.infoIcon}
@@ -669,7 +783,11 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
                 )}
               </div>
 
-              <span style={styles.managementItemLabel}>
+              <span
+                style={
+                  styles.managementItemLabel
+                }
+              >
                 有効化済みサービス
                 <span
                   style={styles.infoIcon}
@@ -689,21 +807,26 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
                       flexWrap: 'wrap'
                     }}
                   >
-                    {tenant.services.map((s) => (
-                      <span
-                        key={s}
-                        style={{
-                          backgroundColor: '#f3f2f1',
-                          border:
-                            '1px solid #8a8886',
-                          padding: '2px 8px',
-                          borderRadius: '2px',
-                          fontSize: '12px'
-                        }}
-                      >
-                        {s}
-                      </span>
-                    ))}
+                    {tenant.services.map(
+                      (s) => (
+                        <span
+                          key={s}
+                          style={{
+                            backgroundColor:
+                              '#f3f2f1',
+                            border:
+                              '1px solid #8a8886',
+                            padding:
+                              '2px 8px',
+                            borderRadius:
+                              '2px',
+                            fontSize: '12px'
+                          }}
+                        >
+                          {s}
+                        </span>
+                      )
+                    )}
                   </div>
                 ) : (
                   <span
@@ -720,7 +843,11 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
 
           {/* システム疎通確認 */}
           <div style={styles.managementSection}>
-            <h3 style={styles.managementSectionTitle}>
+            <h3
+              style={
+                styles.managementSectionTitle
+              }
+            >
               システム疎通確認
             </h3>
 
@@ -740,7 +867,8 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
                 style={{
                   marginTop: '12px',
                   padding: '12px',
-                  backgroundColor: '#f3f2f1',
+                  backgroundColor:
+                    '#f3f2f1',
                   borderRadius: '2px',
                   fontSize: '12px'
                 }}
@@ -751,12 +879,16 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
                 </div>
 
                 <div>
-                  <strong>ストレージ状態:</strong>{' '}
+                  <strong>
+                    ストレージ状態:
+                  </strong>{' '}
                   {healthStatus.storageStatus}
                 </div>
 
                 <div>
-                  <strong>メッセージ:</strong>{' '}
+                  <strong>
+                    メッセージ:
+                  </strong>{' '}
                   {healthStatus.message}
                 </div>
               </div>
@@ -774,7 +906,11 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
               1. 認証方式の管理
               ===================================================== */}
           <div style={styles.managementSection}>
-            <h3 style={styles.managementSectionTitle}>
+            <h3
+              style={
+                styles.managementSectionTitle
+              }
+            >
               認証方式の管理
             </h3>
 
@@ -786,10 +922,22 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
               }}
             >
               {/* 認証方式 */}
-              <div style={styles.managementItem}>
-                <label style={styles.managementItemLabel}>
+              <div
+                style={
+                  styles.managementItem
+                }
+              >
+                <label
+                  style={
+                    styles.managementItemLabel
+                  }
+                >
                   認証方式
-                  <span style={{ color: '#a80000' }}>
+                  <span
+                    style={{
+                      color: '#a80000'
+                    }}
+                  >
                     *
                   </span>
                 </label>
@@ -798,11 +946,15 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
                   value={authMode}
                   onChange={(e) =>
                     handleAuthModeChange(
-                      Number(e.target.value)
+                      Number(
+                        e.target.value
+                      )
                     )
                   }
                   disabled={actionLoading}
-                  style={styles.inputSelect}
+                  style={
+                    styles.inputSelect
+                  }
                 >
                   <option value={0}>
                     JWT (Bearer) のみ
@@ -824,9 +976,15 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
                     '1px solid #e1dfdd'
                 }}
               >
-                <div style={styles.managementItem}>
+                <div
+                  style={
+                    styles.managementItem
+                  }
+                >
                   <label
-                    style={styles.managementItemLabel}
+                    style={
+                      styles.managementItemLabel
+                    }
                   >
                     API Key 管理
                     <span
@@ -842,14 +1000,22 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
                     style={{
                       display: 'flex',
                       gap: '8px',
-                      alignItems: 'center',
-                      flexWrap: 'wrap'
+                      alignItems:
+                        'center',
+                      flexWrap:
+                        'wrap'
                     }}
                   >
                     <button
-                      onClick={handleGenerateApiKey}
-                      disabled={actionLoading}
-                      style={styles.primaryButton}
+                      onClick={
+                        handleGenerateApiKey
+                      }
+                      disabled={
+                        actionLoading
+                      }
+                      style={
+                        styles.primaryButton
+                      }
                     >
                       {apiKey
                         ? 'API Key を再発行'
@@ -859,21 +1025,28 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
                     {apiKey && (
                       <div
                         style={{
-                          display: 'flex',
+                          display:
+                            'flex',
                           gap: '8px',
-                          width: '100%',
-                          maxWidth: '480px',
-                          marginTop: '8px'
+                          width:
+                            '100%',
+                          maxWidth:
+                            '480px',
+                          marginTop:
+                            '8px'
                         }}
                       >
                         <input
                           type="text"
                           readOnly
-                          value={apiKey}
+                          value={
+                            apiKey
+                          }
                           style={{
                             ...styles.inputSelect,
                             flex: 1,
-                            fontFamily: 'monospace'
+                            fontFamily:
+                              'monospace'
                           }}
                         />
 
@@ -901,7 +1074,11 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
               2. サービスの管理
               ===================================================== */}
           <div style={styles.managementSection}>
-            <h3 style={styles.managementSectionTitle}>
+            <h3
+              style={
+                styles.managementSectionTitle
+              }
+            >
               サービスの管理
             </h3>
 
@@ -913,9 +1090,15 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
               }}
             >
               {/* 有効化済みサービス */}
-              <div style={styles.managementItem}>
+              <div
+                style={
+                  styles.managementItem
+                }
+              >
                 <label
-                  style={styles.managementItemLabel}
+                  style={
+                    styles.managementItemLabel
+                  }
                 >
                   有効化済みサービス
                 </label>
@@ -929,22 +1112,27 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
                       flexWrap: 'wrap'
                     }}
                   >
-                    {tenant.services.map((s) => (
-                      <span
-                        key={s}
-                        style={{
-                          backgroundColor:
-                            '#f3f2f1',
-                          border:
-                            '1px solid #8a8886',
-                          padding: '2px 8px',
-                          borderRadius: '2px',
-                          fontSize: '12px'
-                        }}
-                      >
-                        {s}
-                      </span>
-                    ))}
+                    {tenant.services.map(
+                      (s) => (
+                        <span
+                          key={s}
+                          style={{
+                            backgroundColor:
+                              '#f3f2f1',
+                            border:
+                              '1px solid #8a8886',
+                            padding:
+                              '2px 8px',
+                            borderRadius:
+                              '2px',
+                            fontSize:
+                              '12px'
+                          }}
+                        >
+                          {s}
+                        </span>
+                      )
+                    )}
                   </div>
                 ) : (
                   <span
@@ -965,7 +1153,11 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
                     '1px solid #e1dfdd'
                 }}
               >
-                <div style={styles.managementItem}>
+                <div
+                  style={
+                    styles.managementItem
+                  }
+                >
                   <label
                     style={
                       styles.managementItemLabel
@@ -974,25 +1166,35 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
                     追加サービス有効化
                   </label>
 
-                  {unenabledServices.length > 0 ? (
+                  {unenabledServices.length >
+                  0 ? (
                     <form
                       onSubmit={
                         handleEnableService
                       }
                       style={{
-                        display: 'flex',
+                        display:
+                          'flex',
                         gap: '12px',
-                        alignItems: 'center'
+                        alignItems:
+                          'center'
                       }}
                     >
                       <select
-                        value={selectedService}
-                        onChange={(e) =>
+                        value={
+                          selectedService
+                        }
+                        onChange={(
+                          e
+                        ) =>
                           setSelectedService(
-                            e.target.value
+                            e.target
+                              .value
                           )
                         }
-                        disabled={actionLoading}
+                        disabled={
+                          actionLoading
+                        }
                         style={
                           styles.inputSelect
                         }
@@ -1000,10 +1202,16 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
                         {unenabledServices.map(
                           (s) => (
                             <option
-                              key={s.key}
-                              value={s.key}
+                              key={
+                                s.key
+                              }
+                              value={
+                                s.key
+                              }
                             >
-                              {s.label}
+                              {
+                                s.label
+                              }
                             </option>
                           )
                         )}
@@ -1028,7 +1236,8 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
                     <p
                       style={{
                         margin: 0,
-                        color: '#605e5c'
+                        color:
+                          '#605e5c'
                       }}
                     >
                       追加可能なサービスはすべて有効化されています。
@@ -1043,14 +1252,24 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
               3. データベースの管理
               ===================================================== */}
           <div style={styles.managementSection}>
-            <h3 style={styles.managementSectionTitle}>
+            <h3
+              style={
+                styles.managementSectionTitle
+              }
+            >
               データベースの管理
             </h3>
 
             {/* マイグレーション実行 */}
-            <div style={styles.managementItem}>
+            <div
+              style={
+                styles.managementItem
+              }
+            >
               <label
-                style={styles.managementItemLabel}
+                style={
+                  styles.managementItemLabel
+                }
               >
                 スキーママイグレーション
               </label>
@@ -1058,7 +1277,9 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
               <div>
                 <button
                   type="button"
-                  onClick={handleMigrate}
+                  onClick={
+                    handleMigrate
+                  }
                   disabled={
                     migrationLoading ||
                     actionLoading
@@ -1084,7 +1305,11 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
                   '1px solid #e1dfdd'
               }}
             >
-              <div style={styles.managementItem}>
+              <div
+                style={
+                  styles.managementItem
+                }
+              >
                 <label
                   style={
                     styles.managementItemLabel
@@ -1093,14 +1318,23 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
                   マイグレーション履歴
                 </label>
 
-                <div style={{ maxWidth: '540px' }}>
+                <div
+                  style={{
+                    maxWidth:
+                      '540px'
+                  }}
+                >
                   <div
-                    style={styles.subTabBar}
+                    style={
+                      styles.subTabBar
+                    }
                   >
                     {AVAILABLE_SERVICES.map(
                       (service) => (
                         <button
-                          key={service.key}
+                          key={
+                            service.key
+                          }
                           onClick={() =>
                             setActiveMigrationService(
                               service.key
@@ -1111,7 +1345,9 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
                               service.key
                           )}
                         >
-                          {service.label}
+                          {
+                            service.label
+                          }
                         </button>
                       )
                     )}
@@ -1119,21 +1355,27 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
 
                   <div
                     style={{
-                      padding: '12px',
+                      padding:
+                        '12px',
                       backgroundColor:
                         '#faf9f8',
                       border:
                         '1px solid #e1dfdd',
-                      borderRadius: '2px',
-                      maxHeight: '160px',
-                      overflowY: 'auto'
+                      borderRadius:
+                        '2px',
+                      maxHeight:
+                        '160px',
+                      overflowY:
+                        'auto'
                     }}
                   >
                     {loadingMigrations ? (
                       <div
                         style={{
-                          fontSize: '12px',
-                          color: '#605e5c'
+                          fontSize:
+                            '12px',
+                          color:
+                            '#605e5c'
                         }}
                       >
                         履歴を読み込み中...
@@ -1153,15 +1395,23 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
                           <ul
                             style={{
                               margin: 0,
-                              paddingLeft: '16px',
-                              fontSize: '12px',
-                              color: '#605e5c'
+                              paddingLeft:
+                                '16px',
+                              fontSize:
+                                '12px',
+                              color:
+                                '#605e5c'
                             }}
                           >
                             {filteredMigrations.map(
-                              (m, idx) => (
+                              (
+                                m,
+                                idx
+                              ) => (
                                 <li
-                                  key={idx}
+                                  key={
+                                    idx
+                                  }
                                   style={{
                                     marginBottom:
                                       '4px'
@@ -1171,7 +1421,8 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
                                     style={{
                                       fontFamily:
                                         'monospace',
-                                      fontWeight: 600
+                                      fontWeight:
+                                        600
                                     }}
                                   >
                                     {
@@ -1200,8 +1451,10 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
                         ) : (
                           <div
                             style={{
-                              fontSize: '12px',
-                              color: '#a19f9d'
+                              fontSize:
+                                '12px',
+                              color:
+                                '#a19f9d'
                             }}
                           >
                             適用済みの履歴はありません（未有効化または未実行）
@@ -1219,13 +1472,23 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
               4. テナント運用の管理
               ===================================================== */}
           <div style={styles.managementSection}>
-            <h3 style={styles.managementSectionTitle}>
+            <h3
+              style={
+                styles.managementSectionTitle
+              }
+            >
               テナント運用の管理
             </h3>
 
-            <div style={styles.managementItem}>
+            <div
+              style={
+                styles.managementItem
+              }
+            >
               <label
-                style={styles.managementItemLabel}
+                style={
+                  styles.managementItemLabel
+                }
               >
                 ライセンス状況
               </label>
@@ -1235,8 +1498,10 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
                 'suspended' ? (
                   <span
                     style={{
-                      color: '#a80000',
-                      fontWeight: 600
+                      color:
+                        '#a80000',
+                      fontWeight:
+                        600
                     }}
                   >
                     ● 一時停止中 (Suspended)
@@ -1244,8 +1509,10 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
                 ) : (
                   <span
                     style={{
-                      color: '#107c41',
-                      fontWeight: 600
+                      color:
+                        '#107c41',
+                      fontWeight:
+                        600
                     }}
                   >
                     ● Active
@@ -1262,7 +1529,11 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
                   '1px solid #e1dfdd'
               }}
             >
-              <div style={styles.managementItem}>
+              <div
+                style={
+                  styles.managementItem
+                }
+              >
                 <label
                   style={
                     styles.managementItemLabel
@@ -1281,7 +1552,9 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
                           'active'
                         )
                       }
-                      disabled={actionLoading}
+                      disabled={
+                        actionLoading
+                      }
                       style={{
                         ...styles.primaryButton,
                         backgroundColor:
@@ -1298,7 +1571,9 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
                           'suspended'
                         )
                       }
-                      disabled={actionLoading}
+                      disabled={
+                        actionLoading
+                      }
                       style={
                         styles.dangerButton
                       }
@@ -1315,3 +1590,5 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
     </div>
   );
 };
+
+export default TenantDetail;
