@@ -24,7 +24,7 @@ const AVAILABLE_SERVICES = [
 const AUTH_MODE_LABELS: Record<number, string> = {
   0: 'JWT (Bearer) のみ',
   1: 'API Key のみ',
-  2: '両方許可 (Hybrid)',
+  2: '両方許可',
 };
 
 export const TenantDetail: React.FC<TenantDetailProps> = ({
@@ -619,7 +619,7 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
                       fontWeight: 600
                     }}
                   >
-                    ● 稼働中 (Active)
+                    ● Active
                   </span>
                 )}
               </div>
@@ -656,7 +656,7 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
                       fontWeight: 600
                     }}
                   >
-                    ● 発行済み (末尾: ...{apiKey.slice(-6)})
+                    ● 発行済み
                   </span>
                 ) : (
                   <span
@@ -723,14 +723,6 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
             <h3 style={styles.managementSectionTitle}>
               システム疎通確認
             </h3>
-
-            <p
-              style={
-                styles.managementSectionDescription
-              }
-            >
-              テナントのデータベーススキーマおよびストレージへのアクセスが正常かテストします。
-            </p>
 
             <button
               type="button"
@@ -819,7 +811,7 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
                     API Key のみ
                   </option>
                   <option value={2}>
-                    両方許可 (Hybrid)
+                    両方許可
                   </option>
                 </select>
               </div>
@@ -1055,14 +1047,6 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
               データベースの管理
             </h3>
 
-            <p
-              style={
-                styles.managementSectionDescription
-              }
-            >
-              サービスごとのデータベーススキーマを管理します。
-            </p>
-
             {/* マイグレーション実行 */}
             <div style={styles.managementItem}>
               <label
@@ -1264,7 +1248,7 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
                       fontWeight: 600
                     }}
                   >
-                    ● 稼働中 (Active)
+                    ● Active
                   </span>
                 )}
               </div>
