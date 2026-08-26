@@ -1,5 +1,10 @@
-import React, { useState } from 'react';
-import { Tenant } from '../types';
+import React, { useEffect, useState } from 'react';
+import { Tenant, User } from '../types';
+import {
+  fetchUsers,
+  registerUser,
+  deleteUser
+} from '../api';
 
 interface TenantDetailProps {
   tenant: Tenant;
@@ -12,68 +17,78 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
   onBack,
   onRefresh
 }) => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'settings'>(
-    'overview'
-  );
+  const [activeTab, setActiveTab] = useState<
+    'overview' | 'users' | 'settings'
+  >('overview');
 
   const [error, setError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [actionLoading, setActionLoading] = useState(false);
+  const [successMessage, setSuccessMessage] =
+    useState<string | null>(null);
+
+  const [actionLoading, setActionLoading] =
+    useState(false);
 
   /*
    * =========================================================
-   * 現在の Management API OpenAPI 対応状況
+   * 所属ユーザー
    * =========================================================
-   *
-   * 実APIとして存在:
-   *
-   * POST   /api/mng/internal/init
-   *
-   * POST   /api/mng/tenants
-   * GET    /api/mng/tenants
-   * GET    /api/mng/tenants/{tenantId}
-   * DELETE /api/mng/tenants/{tenantId}
-   *
-   * POST   /api/mng/tenants/{tenantId}/users
-   * GET    /api/mng/tenants/{tenantId}/users
-   * GET    /api/mng/tenants/{tenantId}/users/{subjectId}
-   * DELETE /api/mng/tenants/{tenantId}/users/{subjectId}
-   *
-   * 現在 OpenAPI に存在しない:
-   *
-   * - サービス管理
-   * - API Key 管理
-   * - 認証モード管理
-   * - テナントステータス管理
-   * - Migration 管理
-   * - Health Check
-   *
-   * 上記の未実装機能はバックエンドへリクエストせず、
-   * UI確認用のダミー処理としている。
    */
+
+  const [users, setUsers] = useState<User[]>([]);
+  const [usersLoading, setUsersLoading] =
+    useState(false);
+  const [usersError, setUsersError] =
+    useState<string | null>(null);
+
+  const [userSearchFilter, setUserSearchFilter] =
+    useState('');
+
+  /*
+   * ユーザー登録モーダル
+   */
+
+  const [isUserModalOpen, setIsUserModalOpen] =
+    useState(false);
+
+  const [newLoginId, setNewLoginId] =
+    useState('');
+
+  const [newPassword, setNewPassword] =
+    useState('');
+
+  const [newUserName, setNewUserName] =
+    useState('');
+
+  const [newEmail, setNewEmail] =
+    useState('');
+
+  const [userActionLoading, setUserActionLoading] =
+    useState(false);
+
+  const [userActionError, setUserActionError] =
+    useState<string | null>(null);
 
   /*
    * =========================================================
    * ダミー状態
    * =========================================================
-   *
-   * バックエンド側にAPIが追加されたら、
-   * それぞれ実APIへ置き換える。
    */
 
-  const [dummyTenantStatus, setDummyTenantStatus] = useState<
-    'active' | 'suspended'
-  >('active');
+  const [dummyTenantStatus, setDummyTenantStatus] =
+    useState<'active' | 'suspended'>('active');
 
-  const [dummyAuthMode, setDummyAuthMode] = useState<number>(0);
+  const [dummyAuthMode, setDummyAuthMode] =
+    useState<number>(0);
 
-  const [dummyApiKey, setDummyApiKey] = useState<string | null>(null);
+  const [dummyApiKey, setDummyApiKey] =
+    useState<string | null>(null);
 
-  const [dummyHealthStatus, setDummyHealthStatus] = useState<{
-    dbStatus: string;
-    storageStatus: string;
-    message: string;
-  } | null>(null);
+  const [dummyHealthStatus, setDummyHealthStatus] =
+    useState<{
+      dbStatus: string;
+      storageStatus: string;
+      message: string;
+    } | null>(null);
 
   const [dummyMigrations] = useState<
     {
@@ -86,7 +101,266 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
   const [activeMigrationService, setActiveMigrationService] =
     useState('auth');
 
-  const [isCopied, setIsCopied] = useState(false);
+  const [isCopied, setIsCopied] =
+    useState(false);
+
+  /*
+   * =========================================================
+   * ユーザー一覧取得
+   * =========================================================
+   */
+
+  const loadUsers = async () => {
+    setUsersLoading(true);
+    setUsersError(null);
+
+    try {
+      const data = await fetchUsers(
+        tenant.tenantId
+      );
+
+      setUsers(data);
+    } catch (err: any) {
+      console.error(
+        'Failed to fetch tenant users:',
+        err
+      );
+
+      setUsersError(
+        err?.response?.data ||
+          err?.message ||
+          'ユーザー一覧の取得に失敗しました。'
+      );
+    } finally {
+      setUsersLoading(false);
+    }
+  };
+
+  /*
+   * 所属ユーザータブを開いたときに取得
+   */
+
+  useEffect(() => {
+    if (activeTab !== 'users') {
+      return;
+    }
+
+    loadUsers();
+  }, [activeTab, tenant.tenantId]);
+
+  /*
+   * =========================================================
+   * ユーザー登録モーダル
+   * =========================================================
+   */
+
+  const openUserModal = () => {
+    setUserActionError(null);
+
+    setNewLoginId('');
+    setNewPassword('');
+    setNewUserName('');
+    setNewEmail('');
+
+    setIsUserModalOpen(true);
+  };
+
+  const closeUserModal = () => {
+    if (userActionLoading) {
+      return;
+    }
+
+    setIsUserModalOpen(false);
+    setUserActionError(null);
+
+    setNewLoginId('');
+    setNewPassword('');
+    setNewUserName('');
+    setNewEmail('');
+  };
+
+  /*
+   * =========================================================
+   * ユーザー登録
+   *
+   * POST
+   * /api/mng/tenants/{tenantId}/users
+   * =========================================================
+   */
+
+  const handleRegisterUser = async (
+    e: React.FormEvent
+  ) => {
+    e.preventDefault();
+
+    if (!newLoginId.trim()) {
+      setUserActionError(
+        'ログインIDを入力してください。'
+      );
+      return;
+    }
+
+    if (!newPassword) {
+      setUserActionError(
+        'パスワードを入力してください。'
+      );
+      return;
+    }
+
+    setUserActionLoading(true);
+    setUserActionError(null);
+    setError(null);
+    setSuccessMessage(null);
+
+    try {
+      await registerUser(
+        tenant.tenantId,
+        {
+          loginId: newLoginId.trim(),
+          password: newPassword,
+          userName:
+            newUserName.trim() || undefined,
+          email:
+            newEmail.trim() || undefined
+        }
+      );
+
+      closeUserModal();
+
+      setSuccessMessage(
+        `ユーザー '${newLoginId.trim()}' を登録しました。`
+      );
+
+      /*
+       * 登録後に一覧を再取得
+       */
+      await loadUsers();
+    } catch (err: any) {
+      console.error(
+        'Failed to register user:',
+        err
+      );
+
+      setUserActionError(
+        err?.response?.data ||
+          err?.message ||
+          'ユーザーの登録に失敗しました。'
+      );
+    } finally {
+      setUserActionLoading(false);
+    }
+  };
+
+  /*
+   * =========================================================
+   * ユーザー削除
+   *
+   * DELETE
+   * /api/mng/tenants/{tenantId}/users/{subjectId}
+   * =========================================================
+   */
+
+  const handleDeleteUser = async (
+    user: User
+  ) => {
+    const subjectId =
+      (user as any).subjectId;
+
+    if (!subjectId) {
+      alert(
+        'ユーザーID（subjectId）が取得できないため、削除できません。'
+      );
+      return;
+    }
+
+    const loginId =
+      (user as any).loginId ||
+      subjectId;
+
+    if (
+      !window.confirm(
+        `ユーザー '${loginId}' を削除してもよろしいですか？\n\nこの操作は取り消せません。`
+      )
+    ) {
+      return;
+    }
+
+    setUserActionLoading(true);
+    setError(null);
+    setSuccessMessage(null);
+
+    try {
+      await deleteUser(
+        tenant.tenantId,
+        subjectId
+      );
+
+      setSuccessMessage(
+        `ユーザー '${loginId}' を削除しました。`
+      );
+
+      await loadUsers();
+    } catch (err: any) {
+      console.error(
+        'Failed to delete user:',
+        err
+      );
+
+      setError(
+        err?.response?.data ||
+          err?.message ||
+          'ユーザーの削除に失敗しました。'
+      );
+    } finally {
+      setUserActionLoading(false);
+    }
+  };
+
+  /*
+   * =========================================================
+   * ユーザー検索
+   * =========================================================
+   */
+
+  const filteredUsers = users.filter(
+    (user) => {
+      const keyword =
+        userSearchFilter
+          .trim()
+          .toLowerCase();
+
+      if (!keyword) {
+        return true;
+      }
+
+      const loginId =
+        String(
+          (user as any).loginId || ''
+        ).toLowerCase();
+
+      const userName =
+        String(
+          (user as any).userName || ''
+        ).toLowerCase();
+
+      const email =
+        String(
+          (user as any).email || ''
+        ).toLowerCase();
+
+      const subjectId =
+        String(
+          (user as any).subjectId || ''
+        ).toLowerCase();
+
+      return (
+        loginId.includes(keyword) ||
+        userName.includes(keyword) ||
+        email.includes(keyword) ||
+        subjectId.includes(keyword)
+      );
+    }
+  );
 
   /*
    * =========================================================
@@ -102,7 +376,9 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
     setSuccessMessage(null);
 
     try {
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      await new Promise((resolve) =>
+        setTimeout(resolve, 300)
+      );
 
       setSuccessMessage(
         `サービス '${serviceKey}' の有効化処理はダミーです。` +
@@ -134,7 +410,9 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
     setSuccessMessage(null);
 
     try {
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      await new Promise((resolve) =>
+        setTimeout(resolve, 300)
+      );
 
       const generatedKey =
         `dummy_${tenant.tenantId}_${Date.now()}`;
@@ -164,7 +442,9 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
     setSuccessMessage(null);
 
     try {
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      await new Promise((resolve) =>
+        setTimeout(resolve, 300)
+      );
 
       setDummyAuthMode(newMode);
 
@@ -204,7 +484,9 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
     setSuccessMessage(null);
 
     try {
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      await new Promise((resolve) =>
+        setTimeout(resolve, 300)
+      );
 
       setDummyTenantStatus(newStatus);
 
@@ -238,7 +520,9 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
     setSuccessMessage(null);
 
     try {
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      await new Promise((resolve) =>
+        setTimeout(resolve, 300)
+      );
 
       setSuccessMessage(
         'マイグレーションは現在ダミー処理です。' +
@@ -261,7 +545,9 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
     setDummyHealthStatus(null);
 
     try {
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      await new Promise((resolve) =>
+        setTimeout(resolve, 300)
+      );
 
       setDummyHealthStatus({
         dbStatus: 'healthy',
@@ -286,7 +572,9 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
       return;
     }
 
-    await navigator.clipboard.writeText(dummyApiKey);
+    await navigator.clipboard.writeText(
+      dummyApiKey
+    );
 
     setIsCopied(true);
 
@@ -443,8 +731,72 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
       fontSize: '13px',
       fontWeight: 600,
       cursor: 'pointer'
+    },
+
+    table: {
+      width: '100%',
+      borderCollapse: 'collapse' as const,
+      textAlign: 'left' as const,
+      fontSize: '13px',
+      border: '1px solid #e1dfdd'
+    },
+
+    th: {
+      backgroundColor: '#faf9f8',
+      padding: '10px 12px',
+      fontWeight: 600,
+      color: '#323130',
+      borderBottom: '1px solid #e1dfdd',
+      fontSize: '12px'
+    },
+
+    td: {
+      padding: '10px 12px',
+      borderBottom: '1px solid #edebe9',
+      verticalAlign: 'middle'
+    },
+
+    modalOverlay: {
+      position: 'fixed' as const,
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0, 0, 0, 0.4)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 1000
+    },
+
+    modalContainer: {
+      backgroundColor: '#ffffff',
+      padding: '24px',
+      width: '100%',
+      maxWidth: '480px',
+      border: '1px solid #8a8886',
+      boxShadow:
+        '0 6.4px 14.4px 0 rgba(0, 0, 0, 0.132), 0 1.2px 3.6px 0 rgba(0, 0, 0, 0.108)'
+    },
+
+    inputField: {
+      width: '100%',
+      height: '32px',
+      padding: '0 8px',
+      border: '1px solid #605e5c',
+      borderRadius: '2px',
+      fontSize: '13px',
+      outline: 'none',
+      marginTop: '4px',
+      boxSizing: 'border-box' as const
     }
   };
+
+  /*
+   * =========================================================
+   * Render
+   * =========================================================
+   */
 
   return (
     <div style={styles.container}>
@@ -458,30 +810,6 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
       >
         &larr; テナント一覧に戻る
       </button>
-
-      {/* =====================================================
-          タブ
-         ===================================================== */}
-
-      <div style={styles.tabBar}>
-        <button
-          onClick={() => setActiveTab('overview')}
-          style={styles.tabButton(
-            activeTab === 'overview'
-          )}
-        >
-          基本情報
-        </button>
-
-        <button
-          onClick={() => setActiveTab('settings')}
-          style={styles.tabButton(
-            activeTab === 'settings'
-          )}
-        >
-          構成・設定
-        </button>
-      </div>
 
       {/* =====================================================
           タイトル
@@ -503,6 +831,45 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
         </span>{' '}
         の詳細情報を表示します。
       </p>
+
+      {/* =====================================================
+          タブ
+         ===================================================== */}
+
+      <div style={styles.tabBar}>
+        <button
+          onClick={() =>
+            setActiveTab('overview')
+          }
+          style={styles.tabButton(
+            activeTab === 'overview'
+          )}
+        >
+          基本情報
+        </button>
+
+        <button
+          onClick={() =>
+            setActiveTab('users')
+          }
+          style={styles.tabButton(
+            activeTab === 'users'
+          )}
+        >
+          所属ユーザー
+        </button>
+
+        <button
+          onClick={() =>
+            setActiveTab('settings')
+          }
+          style={styles.tabButton(
+            activeTab === 'settings'
+          )}
+        >
+          構成・設定
+        </button>
+      </div>
 
       {/* =====================================================
           エラー
@@ -548,38 +915,28 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
 
       {activeTab === 'overview' && (
         <div style={styles.sectionContainer}>
-          {/* =================================================
-              テナント基本情報
-
-              GET
-              /api/mng/tenants/{tenantId}
-
-              実際のレスポンス:
-
-              {
-                "tenantId": "flaubert",
-                "tenantName": "flaubert",
-                "displayName": "flaubert",
-                "createdAt": "...",
-                "updatedAt": "..."
-              }
-             ================================================= */}
-
           <div style={styles.managementSection}>
-            <h3 style={styles.managementSectionTitle}>
+            <h3
+              style={styles.managementSectionTitle}
+            >
               テナント基本情報
             </h3>
 
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: '200px 1fr',
+                gridTemplateColumns:
+                  '200px 1fr',
                 rowGap: '16px',
                 columnGap: '12px',
                 alignItems: 'center'
               }}
             >
-              <span style={styles.managementItemLabel}>
+              <span
+                style={
+                  styles.managementItemLabel
+                }
+              >
                 テナントID
               </span>
 
@@ -592,7 +949,11 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
                 {tenant.tenantId}
               </div>
 
-              <span style={styles.managementItemLabel}>
+              <span
+                style={
+                  styles.managementItemLabel
+                }
+              >
                 テナント名
               </span>
 
@@ -600,7 +961,11 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
                 {tenant.tenantName}
               </div>
 
-              <span style={styles.managementItemLabel}>
+              <span
+                style={
+                  styles.managementItemLabel
+                }
+              >
                 表示名
               </span>
 
@@ -608,7 +973,11 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
                 {tenant.displayName}
               </div>
 
-              <span style={styles.managementItemLabel}>
+              <span
+                style={
+                  styles.managementItemLabel
+                }
+              >
                 作成日時
               </span>
 
@@ -618,7 +987,11 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
                 ).toLocaleString('ja-JP')}
               </div>
 
-              <span style={styles.managementItemLabel}>
+              <span
+                style={
+                  styles.managementItemLabel
+                }
+              >
                 更新日時
               </span>
 
@@ -632,12 +1005,12 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
 
           {/* =================================================
               現在のステータス
-
-              OpenAPI に存在しないためダミー
              ================================================= */}
 
           <div style={styles.managementSection}>
-            <h3 style={styles.managementSectionTitle}>
+            <h3
+              style={styles.managementSectionTitle}
+            >
               現在のステータス
             </h3>
 
@@ -655,18 +1028,24 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: '200px 1fr',
+                gridTemplateColumns:
+                  '200px 1fr',
                 rowGap: '16px',
                 columnGap: '12px',
                 alignItems: 'center'
               }}
             >
-              <span style={styles.managementItemLabel}>
+              <span
+                style={
+                  styles.managementItemLabel
+                }
+              >
                 ステータス
               </span>
 
               <div>
-                {dummyTenantStatus === 'suspended' ? (
+                {dummyTenantStatus ===
+                'suspended' ? (
                   <span
                     style={{
                       color: '#a80000',
@@ -691,12 +1070,12 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
 
           {/* =================================================
               Health Check
-
-              OpenAPI に存在しないためダミー
              ================================================= */}
 
           <div style={styles.managementSection}>
-            <h3 style={styles.managementSectionTitle}>
+            <h3
+              style={styles.managementSectionTitle}
+            >
               システム疎通確認
             </h3>
 
@@ -707,8 +1086,8 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
                 fontSize: '12px'
               }}
             >
-              ※ Health Check API は現在の OpenAPI に存在しないため、
-              ダミー結果を表示します。
+              ※ Health Check API は現在の OpenAPI
+              に存在しないため、ダミー結果を表示します。
             </p>
 
             <button
@@ -734,19 +1113,317 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
               >
                 <div>
                   <strong>DB状態:</strong>{' '}
-                  {dummyHealthStatus.dbStatus}
+                  {
+                    dummyHealthStatus.dbStatus
+                  }
                 </div>
 
                 <div>
-                  <strong>ストレージ状態:</strong>{' '}
-                  {dummyHealthStatus.storageStatus}
+                  <strong>
+                    ストレージ状態:
+                  </strong>{' '}
+                  {
+                    dummyHealthStatus.storageStatus
+                  }
                 </div>
 
                 <div>
-                  <strong>メッセージ:</strong>{' '}
-                  {dummyHealthStatus.message}
+                  <strong>
+                    メッセージ:
+                  </strong>{' '}
+                  {
+                    dummyHealthStatus.message
+                  }
                 </div>
               </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================
+          所属ユーザー
+         ===================================================== */}
+
+      {activeTab === 'users' && (
+        <div style={styles.sectionContainer}>
+          <div style={styles.managementSection}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent:
+                  'space-between',
+                alignItems: 'center',
+                marginBottom: '16px',
+                gap: '12px'
+              }}
+            >
+              <div>
+                <h3
+                  style={{
+                    ...styles.managementSectionTitle,
+                    marginBottom: '4px'
+                  }}
+                >
+                  所属ユーザー
+                </h3>
+
+                <p
+                  style={{
+                    margin: 0,
+                    color: '#605e5c',
+                    fontSize: '12px'
+                  }}
+                >
+                  テナントに所属しているユーザーを表示します。
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={openUserModal}
+                disabled={
+                  userActionLoading ||
+                  usersLoading
+                }
+                style={{
+                  ...styles.primaryButton,
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                ＋ ユーザーを追加
+              </button>
+            </div>
+
+            {/* =================================================
+                検索・更新
+               ================================================= */}
+
+            <div
+              style={{
+                display: 'flex',
+                justifyContent:
+                  'space-between',
+                alignItems: 'center',
+                gap: '8px',
+                marginBottom: '16px',
+                paddingBottom: '12px',
+                borderBottom:
+                  '1px solid #e1dfdd'
+              }}
+            >
+              <input
+                type="text"
+                placeholder="ログインID、ユーザー名、メールアドレスで検索..."
+                value={userSearchFilter}
+                onChange={(e) =>
+                  setUserSearchFilter(
+                    e.target.value
+                  )
+                }
+                style={{
+                  ...styles.inputField,
+                  marginTop: 0,
+                  maxWidth: '400px'
+                }}
+              />
+
+              <button
+                type="button"
+                onClick={loadUsers}
+                disabled={
+                  usersLoading ||
+                  userActionLoading
+                }
+                style={
+                  styles.secondaryButton
+                }
+              >
+                {usersLoading
+                  ? '読み込み中...'
+                  : '↻ 更新'}
+              </button>
+            </div>
+
+            {/* =================================================
+                エラー
+               ================================================= */}
+
+            {usersError && (
+              <div
+                style={{
+                  padding: '10px 12px',
+                  marginBottom: '16px',
+                  backgroundColor: '#fde7e9',
+                  border:
+                    '1px solid #f8d7da',
+                  color: '#a80000',
+                  borderRadius: '2px'
+                }}
+              >
+                <div
+                  style={{
+                    marginBottom: '8px'
+                  }}
+                >
+                  {usersError}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={loadUsers}
+                  style={
+                    styles.secondaryButton
+                  }
+                >
+                  再試行
+                </button>
+              </div>
+            )}
+
+            {/* =================================================
+                Loading
+               ================================================= */}
+
+            {usersLoading ? (
+              <div
+                style={{
+                  padding: '32px 0',
+                  textAlign: 'center',
+                  color: '#605e5c'
+                }}
+              >
+                ユーザー一覧を読み込み中...
+              </div>
+            ) : filteredUsers.length === 0 ? (
+              <div
+                style={{
+                  padding: '32px 0',
+                  textAlign: 'center',
+                  color: '#605e5c'
+                }}
+              >
+                {userSearchFilter
+                  ? '検索条件に一致するユーザーが見つかりませんでした。'
+                  : 'このテナントに所属するユーザーはいません。'}
+              </div>
+            ) : (
+              <table style={styles.table}>
+                <thead>
+                  <tr>
+                    <th style={styles.th}>
+                      ログインID
+                    </th>
+
+                    <th style={styles.th}>
+                      ユーザー名
+                    </th>
+
+                    <th style={styles.th}>
+                      メールアドレス
+                    </th>
+
+                    <th
+                      style={{
+                        ...styles.th,
+                        textAlign: 'center',
+                        width: '90px'
+                      }}
+                    >
+                      操作
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {filteredUsers.map(
+                    (user) => {
+                      const subjectId =
+                        (user as any)
+                          .subjectId;
+
+                      const loginId =
+                        (user as any)
+                          .loginId || '-';
+
+                      const userName =
+                        (user as any)
+                          .userName || '-';
+
+                      const email =
+                        (user as any)
+                          .email || '-';
+
+                      return (
+                        <tr
+                          key={
+                            subjectId ||
+                            loginId
+                          }
+                        >
+                          <td
+                            style={{
+                              ...styles.td,
+                              fontFamily:
+                                'monospace'
+                            }}
+                          >
+                            {loginId}
+                          </td>
+
+                          <td
+                            style={
+                              styles.td
+                            }
+                          >
+                            {userName}
+                          </td>
+
+                          <td
+                            style={
+                              styles.td
+                            }
+                          >
+                            {email}
+                          </td>
+
+                          <td
+                            style={{
+                              ...styles.td,
+                              textAlign:
+                                'center'
+                            }}
+                          >
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleDeleteUser(
+                                  user
+                                )
+                              }
+                              disabled={
+                                userActionLoading
+                              }
+                              style={{
+                                ...styles.secondaryButton,
+                                height: '28px',
+                                padding:
+                                  '0 10px',
+                                color:
+                                  '#a80000',
+                                borderColor:
+                                  '#f8d7da'
+                              }}
+                            >
+                              削除
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    }
+                  )}
+                </tbody>
+              </table>
             )}
           </div>
         </div>
@@ -760,12 +1437,12 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
         <div style={styles.sectionContainer}>
           {/* =================================================
               認証方式
-
-              OpenAPI に存在しないためダミー
              ================================================= */}
 
           <div style={styles.managementSection}>
-            <h3 style={styles.managementSectionTitle}>
+            <h3
+              style={styles.managementSectionTitle}
+            >
               認証方式の管理
             </h3>
 
@@ -776,12 +1453,18 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
                 fontSize: '12px'
               }}
             >
-              ※ 認証モード変更 API は現在の OpenAPI に存在しないため、
-              以下はダミー設定です。
+              ※ 認証モード変更 API は現在の OpenAPI
+              に存在しないため、以下はダミー設定です。
             </p>
 
-            <div style={styles.managementItem}>
-              <label style={styles.managementItemLabel}>
+            <div
+              style={styles.managementItem}
+            >
+              <label
+                style={
+                  styles.managementItemLabel
+                }
+              >
                 認証方式
               </label>
 
@@ -789,11 +1472,17 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
                 value={dummyAuthMode}
                 onChange={(e) =>
                   handleAuthModeChange(
-                    Number(e.target.value)
+                    Number(
+                      e.target.value
+                    )
                   )
                 }
-                disabled={actionLoading}
-                style={styles.inputSelect}
+                disabled={
+                  actionLoading
+                }
+                style={
+                  styles.inputSelect
+                }
               >
                 <option value={0}>
                   JWT (Bearer) のみ
@@ -812,12 +1501,12 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
 
           {/* =================================================
               API Key
-
-              OpenAPI に存在しないためダミー
              ================================================= */}
 
           <div style={styles.managementSection}>
-            <h3 style={styles.managementSectionTitle}>
+            <h3
+              style={styles.managementSectionTitle}
+            >
               API Key 管理
             </h3>
 
@@ -828,15 +1517,23 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
                 fontSize: '12px'
               }}
             >
-              ※ API Key 発行 API は現在の OpenAPI に存在しません。
-              UI確認用のダミーキーのみ生成します。
+              ※ API Key 発行 API は現在の OpenAPI
+              に存在しません。UI確認用のダミーキーのみ生成します。
             </p>
 
-            <div style={styles.managementItem}>
+            <div
+              style={styles.managementItem}
+            >
               <button
-                onClick={handleGenerateApiKey}
-                disabled={actionLoading}
-                style={styles.primaryButton}
+                onClick={
+                  handleGenerateApiKey
+                }
+                disabled={
+                  actionLoading
+                }
+                style={
+                  styles.primaryButton
+                }
               >
                 {dummyApiKey
                   ? 'API Key を再発行（ダミー）'
@@ -856,17 +1553,24 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
                   <input
                     type="text"
                     readOnly
-                    value={dummyApiKey}
+                    value={
+                      dummyApiKey
+                    }
                     style={{
                       ...styles.inputSelect,
                       flex: 1,
-                      fontFamily: 'monospace'
+                      fontFamily:
+                        'monospace'
                     }}
                   />
 
                   <button
-                    onClick={handleCopyApiKey}
-                    style={styles.secondaryButton}
+                    onClick={
+                      handleCopyApiKey
+                    }
+                    style={
+                      styles.secondaryButton
+                    }
                   >
                     {isCopied
                       ? 'コピー完了'
@@ -879,12 +1583,12 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
 
           {/* =================================================
               サービス管理
-
-              OpenAPI に存在しないためダミー
              ================================================= */}
 
           <div style={styles.managementSection}>
-            <h3 style={styles.managementSectionTitle}>
+            <h3
+              style={styles.managementSectionTitle}
+            >
               サービスの管理
             </h3>
 
@@ -895,12 +1599,18 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
                 fontSize: '12px'
               }}
             >
-              ※ サービス管理 API は現在の OpenAPI に存在しません。
-              以下の操作はダミーです。
+              ※ サービス管理 API は現在の OpenAPI
+              に存在しません。以下の操作はダミーです。
             </p>
 
-            <div style={styles.managementItem}>
-              <label style={styles.managementItemLabel}>
+            <div
+              style={styles.managementItem}
+            >
+              <label
+                style={
+                  styles.managementItemLabel
+                }
+              >
                 サービス
               </label>
 
@@ -911,18 +1621,31 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
                   flexWrap: 'wrap'
                 }}
               >
-                {['auth', 'drive', 'function'].map(
+                {[
+                  'auth',
+                  'drive',
+                  'function'
+                ].map(
                   (service) => (
                     <button
                       key={service}
                       type="button"
                       onClick={() =>
-                        handleEnableService(service)
+                        handleEnableService(
+                          service
+                        )
                       }
-                      disabled={actionLoading}
-                      style={styles.secondaryButton}
+                      disabled={
+                        actionLoading
+                      }
+                      style={
+                        styles.secondaryButton
+                      }
                     >
-                      {service} を有効化（ダミー）
+                      {
+                        service
+                      }{' '}
+                      を有効化（ダミー）
                     </button>
                   )
                 )}
@@ -932,12 +1655,12 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
 
           {/* =================================================
               Migration
-
-              OpenAPI に存在しないためダミー
              ================================================= */}
 
           <div style={styles.managementSection}>
-            <h3 style={styles.managementSectionTitle}>
+            <h3
+              style={styles.managementSectionTitle}
+            >
               データベースの管理
             </h3>
 
@@ -948,24 +1671,36 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
                 fontSize: '12px'
               }}
             >
-              ※ Migration API は現在の OpenAPI に存在しません。
-              以下の操作はダミーです。
+              ※ Migration API は現在の OpenAPI
+              に存在しません。以下の操作はダミーです。
             </p>
 
-            <div style={styles.managementItem}>
-              <label style={styles.managementItemLabel}>
+            <div
+              style={styles.managementItem}
+            >
+              <label
+                style={
+                  styles.managementItemLabel
+                }
+              >
                 スキーママイグレーション
               </label>
 
               <select
-                value={activeMigrationService}
+                value={
+                  activeMigrationService
+                }
                 onChange={(e) =>
                   setActiveMigrationService(
                     e.target.value
                   )
                 }
-                disabled={actionLoading}
-                style={styles.inputSelect}
+                disabled={
+                  actionLoading
+                }
+                style={
+                  styles.inputSelect
+                }
               >
                 <option value="auth">
                   Auth
@@ -982,9 +1717,15 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
 
               <button
                 type="button"
-                onClick={handleMigrate}
-                disabled={actionLoading}
-                style={styles.secondaryButton}
+                onClick={
+                  handleMigrate
+                }
+                disabled={
+                  actionLoading
+                }
+                style={
+                  styles.secondaryButton
+                }
               >
                 {actionLoading
                   ? 'マイグレーション実行中...'
@@ -996,10 +1737,15 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
               style={{
                 marginTop: '20px',
                 paddingTop: '16px',
-                borderTop: '1px solid #e1dfdd'
+                borderTop:
+                  '1px solid #e1dfdd'
               }}
             >
-              <label style={styles.managementItemLabel}>
+              <label
+                style={
+                  styles.managementItemLabel
+                }
+              >
                 マイグレーション履歴
               </label>
 
@@ -1007,25 +1753,36 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
                 style={{
                   marginTop: '8px',
                   padding: '12px',
-                  backgroundColor: '#faf9f8',
-                  border: '1px solid #e1dfdd',
+                  backgroundColor:
+                    '#faf9f8',
+                  border:
+                    '1px solid #e1dfdd',
                   borderRadius: '2px'
                 }}
               >
-                {dummyMigrations.length === 0 ? (
+                {dummyMigrations.length ===
+                0 ? (
                   <span
                     style={{
                       fontSize: '12px',
-                      color: '#a19f9d'
+                      color:
+                        '#a19f9d'
                     }}
                   >
                     適用済みの履歴はありません（ダミー）
                   </span>
                 ) : (
                   dummyMigrations.map(
-                    (migration, index) => (
-                      <div key={index}>
-                        {migration.migrationName}
+                    (
+                      migration,
+                      index
+                    ) => (
+                      <div
+                        key={index}
+                      >
+                        {
+                          migration.migrationName
+                        }
                       </div>
                     )
                   )
@@ -1036,12 +1793,12 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
 
           {/* =================================================
               テナント運用
-
-              OpenAPI に存在しないためダミー
              ================================================= */}
 
           <div style={styles.managementSection}>
-            <h3 style={styles.managementSectionTitle}>
+            <h3
+              style={styles.managementSectionTitle}
+            >
               テナント運用の管理
             </h3>
 
@@ -1052,20 +1809,28 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
                 fontSize: '12px'
               }}
             >
-              ※ テナントステータス変更 API は現在の OpenAPI
-              に存在しないため、以下はダミー処理です。
+              ※ テナントステータス変更 API は現在の
+              OpenAPI に存在しないため、以下はダミー処理です。
             </p>
 
-            <div style={styles.managementItem}>
-              <label style={styles.managementItemLabel}>
+            <div
+              style={styles.managementItem}
+            >
+              <label
+                style={
+                  styles.managementItemLabel
+                }
+              >
                 現在の状態
               </label>
 
               <div>
-                {dummyTenantStatus === 'suspended' ? (
+                {dummyTenantStatus ===
+                'suspended' ? (
                   <span
                     style={{
-                      color: '#a80000',
+                      color:
+                        '#a80000',
                       fontWeight: 600
                     }}
                   >
@@ -1074,7 +1839,8 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
                 ) : (
                   <span
                     style={{
-                      color: '#107c41',
+                      color:
+                        '#107c41',
                       fontWeight: 600
                     }}
                   >
@@ -1088,19 +1854,26 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
               style={{
                 marginTop: '20px',
                 paddingTop: '16px',
-                borderTop: '1px solid #e1dfdd'
+                borderTop:
+                  '1px solid #e1dfdd'
               }}
             >
-              {dummyTenantStatus === 'suspended' ? (
+              {dummyTenantStatus ===
+              'suspended' ? (
                 <button
                   type="button"
                   onClick={() =>
-                    handleStatusChange('active')
+                    handleStatusChange(
+                      'active'
+                    )
                   }
-                  disabled={actionLoading}
+                  disabled={
+                    actionLoading
+                  }
                   style={{
                     ...styles.primaryButton,
-                    backgroundColor: '#107c41'
+                    backgroundColor:
+                      '#107c41'
                   }}
                 >
                   テナントを有効化（ダミー）
@@ -1109,10 +1882,16 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
                 <button
                   type="button"
                   onClick={() =>
-                    handleStatusChange('suspended')
+                    handleStatusChange(
+                      'suspended'
+                    )
                   }
-                  disabled={actionLoading}
-                  style={styles.dangerButton}
+                  disabled={
+                    actionLoading
+                  }
+                  style={
+                    styles.dangerButton
+                  }
                 >
                   テナントを一時停止（ダミー）
                 </button>
@@ -1125,7 +1904,9 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
              ================================================= */}
 
           <div style={styles.managementSection}>
-            <h3 style={styles.managementSectionTitle}>
+            <h3
+              style={styles.managementSectionTitle}
+            >
               OpenAPI 対応状況
             </h3>
 
@@ -1157,8 +1938,23 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
               </div>
 
               <div>
-                ✓ ユーザー管理:
-                /tenants/{'{tenantId}'}/users
+                ✓ ユーザー一覧:
+                GET /api/mng/tenants/{'{tenantId}'}/users
+              </div>
+
+              <div>
+                ✓ ユーザー登録:
+                POST /api/mng/tenants/{'{tenantId}'}/users
+              </div>
+
+              <div>
+                ✓ ユーザー詳細:
+                GET /api/mng/tenants/{'{tenantId}'}/users/{'{subjectId}'}
+              </div>
+
+              <div>
+                ✓ ユーザー削除:
+                DELETE /api/mng/tenants/{'{tenantId}'}/users/{'{subjectId}'}
               </div>
 
               <div>
@@ -1196,6 +1992,287 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
               ※ バックエンドの OpenAPI に API が追加されたら、
               実APIへ置き換える。
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================
+          ユーザー登録モーダル
+         ===================================================== */}
+
+      {isUserModalOpen && (
+        <div
+          style={styles.modalOverlay}
+          onClick={closeUserModal}
+        >
+          <div
+            style={styles.modalContainer}
+            onClick={(e) =>
+              e.stopPropagation()
+            }
+          >
+            <h3
+              style={{
+                margin:
+                  '0 0 16px 0',
+                fontSize: '18px',
+                fontWeight: 600
+              }}
+            >
+              ユーザーを追加
+            </h3>
+
+            <p
+              style={{
+                margin:
+                  '0 0 16px 0',
+                color:
+                  '#605e5c',
+                fontSize: '12px'
+              }}
+            >
+              テナント{' '}
+              <span
+                style={{
+                  fontFamily:
+                    'monospace',
+                  fontWeight: 600
+                }}
+              >
+                {tenant.tenantId}
+              </span>{' '}
+              にユーザーを登録します。
+            </p>
+
+            {userActionError && (
+              <div
+                style={{
+                  padding:
+                    '8px 12px',
+                  backgroundColor:
+                    '#fde7e9',
+                  border:
+                    '1px solid #f8d7da',
+                  color:
+                    '#a80000',
+                  fontSize:
+                    '12px',
+                  marginBottom:
+                    '16px'
+                }}
+              >
+                {userActionError}
+              </div>
+            )}
+
+            <form
+              onSubmit={
+                handleRegisterUser
+              }
+              style={{
+                display:
+                  'flex',
+                flexDirection:
+                  'column',
+                gap: '16px'
+              }}
+            >
+              {/* ログインID */}
+
+              <div>
+                <label
+                  style={{
+                    fontWeight: 600,
+                    fontSize:
+                      '12px'
+                  }}
+                >
+                  ログインID{' '}
+                  <span
+                    style={{
+                      color:
+                        '#a80000'
+                    }}
+                  >
+                    *
+                  </span>
+                </label>
+
+                <input
+                  type="text"
+                  required
+                  autoFocus
+                  placeholder="例: user01"
+                  value={
+                    newLoginId
+                  }
+                  onChange={(e) =>
+                    setNewLoginId(
+                      e.target.value
+                    )
+                  }
+                  disabled={
+                    userActionLoading
+                  }
+                  style={
+                    styles.inputField
+                  }
+                />
+              </div>
+
+              {/* パスワード */}
+
+              <div>
+                <label
+                  style={{
+                    fontWeight: 600,
+                    fontSize:
+                      '12px'
+                  }}
+                >
+                  パスワード{' '}
+                  <span
+                    style={{
+                      color:
+                        '#a80000'
+                    }}
+                  >
+                    *
+                  </span>
+                </label>
+
+                <input
+                  type="password"
+                  required
+                  placeholder="パスワード"
+                  value={
+                    newPassword
+                  }
+                  onChange={(e) =>
+                    setNewPassword(
+                      e.target.value
+                    )
+                  }
+                  disabled={
+                    userActionLoading
+                  }
+                  style={
+                    styles.inputField
+                  }
+                />
+              </div>
+
+              {/* ユーザー名 */}
+
+              <div>
+                <label
+                  style={{
+                    fontWeight: 600,
+                    fontSize:
+                      '12px'
+                  }}
+                >
+                  ユーザー名
+                </label>
+
+                <input
+                  type="text"
+                  placeholder="例: 山田 太郎"
+                  value={
+                    newUserName
+                  }
+                  onChange={(e) =>
+                    setNewUserName(
+                      e.target.value
+                    )
+                  }
+                  disabled={
+                    userActionLoading
+                  }
+                  style={
+                    styles.inputField
+                  }
+                />
+              </div>
+
+              {/* メールアドレス */}
+
+              <div>
+                <label
+                  style={{
+                    fontWeight: 600,
+                    fontSize:
+                      '12px'
+                  }}
+                >
+                  メールアドレス
+                </label>
+
+                <input
+                  type="email"
+                  placeholder="例: user@example.com"
+                  value={
+                    newEmail
+                  }
+                  onChange={(e) =>
+                    setNewEmail(
+                      e.target.value
+                    )
+                  }
+                  disabled={
+                    userActionLoading
+                  }
+                  style={
+                    styles.inputField
+                  }
+                />
+              </div>
+
+              {/* ボタン */}
+
+              <div
+                style={{
+                  display:
+                    'flex',
+                  justifyContent:
+                    'flex-end',
+                  gap: '8px',
+                  marginTop:
+                    '8px'
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={
+                    closeUserModal
+                  }
+                  disabled={
+                    userActionLoading
+                  }
+                  style={
+                    styles.secondaryButton
+                  }
+                >
+                  キャンセル
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={
+                    userActionLoading ||
+                    !newLoginId.trim() ||
+                    !newPassword
+                  }
+                  style={
+                    styles.primaryButton
+                  }
+                >
+                  {userActionLoading
+                    ? '登録中...'
+                    : '登録'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
