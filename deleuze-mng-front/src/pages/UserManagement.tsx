@@ -307,7 +307,6 @@ export const UserManagement: React.FC<UserManagementProps> = ({
         <table style={styles.table}>
           <thead>
             <tr>
-              <th style={styles.th}>Subject ID</th>
               <th style={styles.th}>ログイン ID</th>
               <th style={styles.th}>ユーザー名</th>
               <th style={styles.th}>メールアドレス</th>

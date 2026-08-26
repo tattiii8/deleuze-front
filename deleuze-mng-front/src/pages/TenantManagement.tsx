@@ -299,7 +299,6 @@ export const TenantManagement: React.FC<TenantManagementProps> = ({
           <thead>
             <tr>
               <th style={styles.th}>テナント ID</th>
-              <th style={styles.th}>テナント名</th>
               <th style={styles.th}>表示名</th>
               <th style={styles.th}>作成日時</th>
               <th style={styles.th}>更新日時</th>
