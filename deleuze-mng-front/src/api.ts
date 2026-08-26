@@ -2,7 +2,7 @@ import axios from 'axios';
 import { Tenant, User } from './types';
 
 const api = axios.create({
-  baseURL: 'http://192.168.8.19:5002/api/mng'
+  baseURL: 'http://192.168.8.112:5002/api/mng'
 });
 
 /* ==========================================
