@@ -7,8 +7,16 @@ interface UserManagementProps {
   loading?: boolean;
   error?: string | null;
   onRefresh?: () => Promise<void>;
-  onRegisterUser?: (payload: { loginId: string; password: string; tenantId: string }) => Promise<void>;
-  onDeleteUser?: (id: string | number) => Promise<void>;
+  onRegisterUser?: (
+    tenantId: string,
+    payload: {
+      loginId: string;
+      password: string;
+      userName?: string;
+      email?: string;
+    }
+  ) => Promise<void>;
+  onDeleteUser?: (tenantId: string, subjectId: string) => Promise<void>;
 }
 
 export const UserManagement: React.FC<UserManagementProps> = ({
@@ -25,6 +33,8 @@ export const UserManagement: React.FC<UserManagementProps> = ({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loginId, setLoginId] = useState('');
   const [password, setPassword] = useState('');
+  const [userName, setUserName] = useState('');
+  const [email, setEmail] = useState('');
   const [selectedTenantId, setSelectedTenantId] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -40,6 +50,8 @@ export const UserManagement: React.FC<UserManagementProps> = ({
     setActionError(null);
     setLoginId('');
     setPassword('');
+    setUserName('');
+    setEmail('');
     setSelectedTenantId('');
   };
 
@@ -51,11 +63,20 @@ export const UserManagement: React.FC<UserManagementProps> = ({
     setActionError(null);
 
     try {
+      const tenantId =
+        selectedTenantId || tenants[0]?.tenantId || '';
+
+      if (!tenantId) {
+        setActionError('所属テナントを指定してください。');
+        return;
+      }
+
       if (onRegisterUser) {
-        await onRegisterUser({
+        await onRegisterUser(tenantId, {
           loginId: loginId.trim(),
           password: password.trim(),
-          tenantId: selectedTenantId || (tenants[0]?.tenantId || '')
+          userName: userName.trim() || undefined,
+          email: email.trim() || undefined
         });
       }
       closeModal();
@@ -66,7 +87,19 @@ export const UserManagement: React.FC<UserManagementProps> = ({
     }
   };
 
-  const handleDelete = async (id: string | number, userLoginId: string) => {
+  const handleDelete = async (
+    tenantId: string,
+    subjectId: string,
+    userLoginId: string
+  ) => {
+    if (
+      !tenantId ||
+      !subjectId
+    ) {
+      alert('テナント ID または subjectId が取得できません。');
+      return;
+    }
+
     if (!window.confirm(`ユーザー '${userLoginId}' を削除してもよろしいですか？`)) {
       return;
     }
@@ -74,7 +107,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({
     setActionLoading(true);
     try {
       if (onDeleteUser) {
-        await onDeleteUser(id);
+        await onDeleteUser(tenantId, subjectId);
       }
     } catch (err: any) {
       alert(err.message || 'ユーザーの削除に失敗しました。');
@@ -274,8 +307,10 @@ export const UserManagement: React.FC<UserManagementProps> = ({
         <table style={styles.table}>
           <thead>
             <tr>
-              <th style={styles.th}>ID</th>
+              <th style={styles.th}>Subject ID</th>
               <th style={styles.th}>ログイン ID</th>
+              <th style={styles.th}>ユーザー名</th>
+              <th style={styles.th}>メールアドレス</th>
               <th style={styles.th}>所属テナント ID</th>
               <th style={styles.th}>作成日時</th>
               <th style={{ ...styles.th, textAlign: 'center', width: '90px' }}>操作</th>
@@ -283,22 +318,34 @@ export const UserManagement: React.FC<UserManagementProps> = ({
           </thead>
           <tbody>
             {filteredUsers.map((user, idx) => (
-              <tr key={user?.id || idx} style={{ backgroundColor: '#ffffff' }}>
+              <tr key={user?.subjectId || idx} style={{ backgroundColor: '#ffffff' }}>
                 <td style={{ ...styles.td, fontFamily: 'monospace', color: '#605e5c', fontSize: '12px' }}>
-                  {user?.id ?? '-'}
+                  {user?.subjectId ?? '-'}
                 </td>
                 <td style={{ ...styles.td, fontWeight: 600, color: '#0078d4' }}>
                   {user?.loginId ?? '-'}
                 </td>
                 <td style={styles.td}>
+                  {user?.userName ?? '-'}
+                </td>
+                <td style={styles.td}>
+                  {user?.email ?? '-'}
+                </td>
+                <td style={styles.td}>
                   <span style={styles.badge}>{user?.tenantId ?? '-'}</span>
                 </td>
                 <td style={{ ...styles.td, color: '#605e5c', fontSize: '12px' }}>
-                  {user?.createdAt ?? '-'}
+                  {user?.createdAt ? new Date(user.createdAt).toLocaleString('ja-JP') : '-'}
                 </td>
                 <td style={{ ...styles.td, textAlign: 'center' }}>
                   <button
-                    onClick={() => handleDelete(user?.id, user?.loginId)}
+                    onClick={() =>
+                      handleDelete(
+                        user?.tenantId ?? '',
+                        user?.subjectId ?? '',
+                        user?.loginId ?? ''
+                      )
+                    }
                     disabled={actionLoading}
                     style={styles.deleteButton}
                   >
@@ -346,6 +393,32 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  style={styles.inputField}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontWeight: 600, fontSize: '12px' }}>
+                  ユーザー名
+                </label>
+                <input
+                  type="text"
+                  placeholder="例: 山田 太郎"
+                  value={userName}
+                  onChange={(e) => setUserName(e.target.value)}
+                  style={styles.inputField}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontWeight: 600, fontSize: '12px' }}>
+                  メールアドレス
+                </label>
+                <input
+                  type="email"
+                  placeholder="例: user@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   style={styles.inputField}
                 />
               </div>

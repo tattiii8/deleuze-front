@@ -1,45 +1,18 @@
-import axios, { InternalAxiosRequestConfig } from 'axios';
-import CryptoJS from 'crypto-js';
+import axios from 'axios';
 import { Tenant, User } from './types';
-
-// 環境変数または設定された SECRET KEY
-const SECRET_KEY = import.meta.env.VITE_MANAGEMENT_API_SECRET || "";
-
-function generateDynamicToken(): string {
-  const timestamp = Math.floor(Date.now() / 1000).toString();
-  const nonce = Math.random().toString(36).substring(2, 10);
-  const payloadRaw = `${timestamp}|${nonce}`;
-
-  const payloadBase64 = CryptoJS.enc.Base64.stringify(
-    CryptoJS.enc.Utf8.parse(payloadRaw)
-  );
-
-  const hmac = CryptoJS.HmacSHA256(payloadBase64, SECRET_KEY);
-  const signatureBase64 = CryptoJS.enc.Base64.stringify(hmac);
-
-  return `${payloadBase64}:${signatureBase64}`;
-}
 
 const api = axios.create({
   baseURL: '/api/mng'
 });
 
-// リクエストインターセプターで HMAC トークンを自動設定
-api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
-  const token = generateDynamicToken();
-
-  config.headers['Authorization'] = `Bearer ${token}`;
-
-  return config;
-});
-
-
 /* ==========================================
- *  テナント管理 (Tenants)
+ * テナント管理 (Tenants)
  * ========================================== */
 
 /**
- * 全テナント一覧を取得します
+ * 全テナント一覧を取得
+ *
+ * GET /api/mng/tenants
  */
 export async function fetchTenants(): Promise<Tenant[]> {
   const response = await api.get<Tenant[]>('/tenants');
@@ -47,226 +20,226 @@ export async function fetchTenants(): Promise<Tenant[]> {
 }
 
 /**
- * ID 指定でテナント詳細を取得します
+ * ID指定でテナント詳細を取得
+ *
+ * GET /api/mng/tenants/{tenantId}
  */
-export async function fetchTenantById(tenantId: string): Promise<Tenant> {
-  const response = await api.get<Tenant>(`/tenants/${tenantId}`);
+export async function fetchTenantById(
+  tenantId: string
+): Promise<Tenant> {
+  const response = await api.get<Tenant>(
+    `/tenants/${tenantId}`
+  );
+
   return response.data;
 }
 
 /**
- * 新規テナントを作成します
+ * 新規テナントを作成
+ *
+ * POST /api/mng/tenants
+ *
+ * CreateTenantRequest:
+ * {
+ *   tenantId: string;
+ *   tenantName?: string;
+ *   displayName?: string;
+ * }
  */
 export async function createTenant(payload: {
   tenantId: string;
-  name?: string;
-  services?: string[];
+  tenantName?: string;
+  displayName?: string;
 }): Promise<void> {
   await api.post('/tenants', payload);
 }
 
 /**
- * テナントを削除します
+ * テナントを削除
+ *
+ * DELETE /api/mng/tenants/{tenantId}
  */
-export async function deleteTenant(tenantId: string): Promise<void> {
+export async function deleteTenant(
+  tenantId: string
+): Promise<void> {
   await api.delete(`/tenants/${tenantId}`);
 }
 
 
 /* ==========================================
- *  テナントサービス管理
+ * ユーザー管理 (Users)
  * ========================================== */
 
 /**
- * テナントに対して追加サービスを有効化します
+ * テナントのユーザー一覧を取得
+ *
+ * GET /api/mng/tenants/{tenantId}/users
  */
-export async function enableService(
-  tenantId: string,
-  serviceKey: string
-): Promise<{ message: string }> {
-  const response = await api.post<{ message: string }>(
-    `/tenants/${tenantId}/services`,
-    {
-      serviceKey
-    }
-  );
-
-  return response.data;
-}
-
-/**
- * テナントのサービスを無効化します
- */
-export async function disableService(
-  tenantId: string,
-  serviceKey: string
-): Promise<{ message: string }> {
-  const response = await api.delete<{ message: string }>(
-    `/tenants/${tenantId}/services`,
-    {
-      data: {
-        serviceKey
-      }
-    }
-  );
-
-  return response.data;
-}
-
-
-/* ==========================================
- *  テナント API Key 管理
- * ========================================== */
-
-/**
- * テナントの API Key を発行（または再発行）します
- */
-export async function generateApiKey(
+export async function fetchUsers(
   tenantId: string
-): Promise<{ apiKey: string }> {
-  const response = await api.post<{ apiKey: string }>(
-    `/tenants/${tenantId}/apikey`
+): Promise<User[]> {
+  const response = await api.get<User[]>(
+    `/tenants/${tenantId}/users`
   );
 
   return response.data;
 }
 
-
-/* ==========================================
- *  テナント認証モード管理
- * ========================================== */
-
 /**
- * テナントの認証モードを変更します
+ * ユーザーを登録
  *
- * 0: JwtOnly
- * 1: ApiKeyOnly
- * 2: Hybrid
+ * POST /api/mng/tenants/{tenantId}/users
+ *
+ * CreateUserRequest:
+ * {
+ *   loginId: string;
+ *   password: string;
+ *   userName?: string;
+ *   email?: string;
+ * }
  */
-export async function updateAuthMode(
+export async function registerUser(
   tenantId: string,
-  authMode: number
-): Promise<{ message: string; authMode: string }> {
-  const response = await api.patch<{
-    message: string;
-    authMode: string;
-  }>(
-    `/tenants/${tenantId}/authmode`,
-    {
-      authMode
-    }
+  payload: {
+    loginId: string;
+    password: string;
+    userName?: string;
+    email?: string;
+  }
+): Promise<void> {
+  await api.post(
+    `/tenants/${tenantId}/users`,
+    payload
+  );
+}
+
+/**
+ * ユーザー詳細を取得
+ *
+ * GET /api/mng/tenants/{tenantId}/users/{subjectId}
+ */
+export async function fetchUserById(
+  tenantId: string,
+  subjectId: string
+): Promise<User> {
+  const response = await api.get<User>(
+    `/tenants/${tenantId}/users/${subjectId}`
   );
 
   return response.data;
 }
 
+/**
+ * ユーザーを削除
+ *
+ * DELETE /api/mng/tenants/{tenantId}/users/{subjectId}
+ */
+export async function deleteUser(
+  tenantId: string,
+  subjectId: string
+): Promise<void> {
+  await api.delete(
+    `/tenants/${tenantId}/users/${subjectId}`
+  );
+}
+
 
 /* ==========================================
- *  テナントステータス管理
+ * 未実装API
+ * ========================================== */
+
+/*
+ * 以下は現在の OpenAPI に存在しないため、
+ * バックエンド実装後に有効化する。
+ *
+ * ------------------------------------------
+ * テナントサービス管理
+ * ------------------------------------------
+ *
+ * POST   /tenants/{tenantId}/services
+ * DELETE /tenants/{tenantId}/services
+ *
+ * export async function enableService(...)
+ * export async function disableService(...)
+ *
+ *
+ * ------------------------------------------
+ * テナント API Key 管理
+ * ------------------------------------------
+ *
+ * POST /tenants/{tenantId}/apikey
+ *
+ * export async function generateApiKey(...)
+ *
+ *
+ * ------------------------------------------
+ * テナント認証モード管理
+ * ------------------------------------------
+ *
+ * PATCH /tenants/{tenantId}/authmode
+ *
+ * export async function updateAuthMode(...)
+ *
+ *
+ * ------------------------------------------
+ * テナントステータス管理
+ * ------------------------------------------
+ *
+ * GET   /tenants/{tenantId}/status
+ * PATCH /tenants/{tenantId}/status
+ *
+ * export async function fetchTenantStatus(...)
+ * export async function updateTenantStatus(...)
+ *
+ *
+ * ------------------------------------------
+ * テナント DB 管理
+ * ------------------------------------------
+ *
+ * GET  /tenants/{tenantId}/migrations
+ * POST /tenants/{tenantId}/migrate/{serviceKey}
+ *
+ * export async function fetchTenantMigrations(...)
+ * export async function migrateTenant(...)
+ *
+ *
+ * ------------------------------------------
+ * テナント Health Check
+ * ------------------------------------------
+ *
+ * GET /tenants/{tenantId}/health
+ *
+ * export async function checkTenantHealth(...)
+ */
+
+
+/* ==========================================
+ * ダミーAPI
  * ========================================== */
 
 /**
- * テナントステータスのレスポンス
+ * 現在バックエンド未実装のためダミーデータを返す。
  *
- * status:
- *   active
- *   suspended
- *
- * isActive:
- *   true  = 稼働中
- *   false = 一時停止中
- */
-export interface TenantStatusResponse {
-  tenantId: string;
-  status: 'active' | 'suspended';
-  isActive: boolean;
-}
-
-/**
- * テナントの現在のステータスを取得します
- *
- * GET /api/mng/tenants/{tenantId}/status
+ * UI開発用。
  */
 export async function fetchTenantStatus(
   tenantId: string
-): Promise<TenantStatusResponse> {
-  const response = await api.get<TenantStatusResponse>(
-    `/tenants/${tenantId}/status`
-  );
-
-  return response.data;
+): Promise<{
+  tenantId: string;
+  status: 'active' | 'suspended';
+  isActive: boolean;
+}> {
+  return {
+    tenantId,
+    status: 'active',
+    isActive: true
+  };
 }
 
 /**
- * テナントのステータスを更新します
+ * 現在バックエンド未実装のためダミーデータを返す。
  *
- * PATCH /api/mng/tenants/{tenantId}/status
- */
-export async function updateTenantStatus(
-  tenantId: string,
-  status: 'active' | 'suspended'
-): Promise<{ message: string }> {
-  const response = await api.patch<{ message: string }>(
-    `/tenants/${tenantId}/status`,
-    {
-      status
-    }
-  );
-
-  return response.data;
-}
-
-
-/* ==========================================
- *  テナント DB 管理
- * ========================================== */
-
-/**
- * テナントのマイグレーション適用履歴を取得します
- */
-export async function fetchTenantMigrations(
-  tenantId: string
-): Promise<
-  {
-    migrationName: string;
-    appliedAt: string;
-    serviceKey?: string;
-  }[]
-> {
-  const response = await api.get<
-    {
-      migrationName: string;
-      appliedAt: string;
-      serviceKey?: string;
-    }[]
-  >(
-    `/tenants/${tenantId}/migrations`
-  );
-
-  return response.data;
-}
-
-/**
- * 指定したテナントのデータベースマイグレーションを実行します
- */
-export async function migrateTenant(
-  tenantId: string,
-  serviceKey: string
-): Promise<{ message: string }> {
-  const response = await api.post<{ message: string }>(
-    `/tenants/${tenantId}/migrate/${serviceKey}`
-  );
-
-  return response.data;
-}
-
-
-/* ==========================================
- *  テナント Health Check
- * ========================================== */
-
-/**
- * テナントの接続・ヘルスチェック（DB・S3）を実行します
+ * UI開発用。
  */
 export async function checkTenantHealth(
   tenantId: string
@@ -275,48 +248,11 @@ export async function checkTenantHealth(
   storageStatus: string;
   message: string;
 }> {
-  const response = await api.get<{
-    dbStatus: string;
-    storageStatus: string;
-    message: string;
-  }>(
-    `/tenants/${tenantId}/health`
-  );
-
-  return response.data;
-}
-
-
-/* ==========================================
- *  ユーザー管理 (Users)
- * ========================================== */
-
-/**
- * 全ユーザー一覧を取得します
- */
-export async function fetchUsers(): Promise<User[]> {
-  const response = await api.get<User[]>('/users');
-  return response.data;
-}
-
-/**
- * 新規ユーザーを登録します
- */
-export async function registerUser(payload: {
-  loginId: string;
-  password: string;
-  tenantId: string;
-}): Promise<void> {
-  await api.post('/users', payload);
-}
-
-/**
- * ユーザーを削除します
- */
-export async function deleteUser(
-  id: string | number
-): Promise<void> {
-  await api.delete(`/users/${id}`);
+  return {
+    dbStatus: 'healthy',
+    storageStatus: 'healthy',
+    message: 'ダミーデータです'
+  };
 }
 
 

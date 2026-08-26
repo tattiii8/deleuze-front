@@ -7,7 +7,11 @@ interface TenantManagementProps {
   error: string | null;
   onSelectTenant: (tenant: Tenant) => void;
   onRefresh: () => Promise<void>;
-  onCreateTenant: (payload: { tenantId: string; name?: string; services?: string[] }) => Promise<void>;
+  onCreateTenant: (payload: {
+    tenantId: string;
+    tenantName?: string;
+    displayName?: string;
+  }) => Promise<void>;
   onDeleteTenant: (tenantId: string) => Promise<void>;
 }
 
@@ -25,7 +29,7 @@ export const TenantManagement: React.FC<TenantManagementProps> = ({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newTenantId, setNewTenantId] = useState('');
   const [newTenantName, setNewTenantName] = useState('');
-  const [selectedServices, setSelectedServices] = useState<string[]>([]);
+  const [newTenantDisplayName, setNewTenantDisplayName] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -38,7 +42,7 @@ export const TenantManagement: React.FC<TenantManagementProps> = ({
     setActionError(null);
     setNewTenantId('');
     setNewTenantName('');
-    setSelectedServices([]);
+    setNewTenantDisplayName('');
   };
 
   const handleCreateSubmit = async (e: React.FormEvent) => {
@@ -51,8 +55,8 @@ export const TenantManagement: React.FC<TenantManagementProps> = ({
     try {
       await onCreateTenant({
         tenantId: newTenantId.trim(),
-        name: newTenantName.trim() || undefined,
-        services: selectedServices
+        tenantName: newTenantName.trim() || undefined,
+        displayName: newTenantDisplayName.trim() || undefined
       });
       closeModal();
       await onRefresh();
@@ -77,12 +81,6 @@ export const TenantManagement: React.FC<TenantManagementProps> = ({
     } finally {
       setActionLoading(false);
     }
-  };
-
-  const handleServiceToggle = (serviceKey: string) => {
-    setSelectedServices((prev) =>
-      prev.includes(serviceKey) ? prev.filter((s) => s !== serviceKey) : [...prev, serviceKey]
-    );
   };
 
   const styles = {
@@ -270,7 +268,7 @@ export const TenantManagement: React.FC<TenantManagementProps> = ({
       <div style={styles.header}>
         <h2 style={styles.title}>テナント管理一覧</h2>
         <span style={{ color: '#605e5c', fontSize: '13px' }}>
-          登録済みの全テナントと認証設定、有効化サービスの一覧を表示します。
+          登録済みの全テナント一覧を表示します。
         </span>
       </div>
 
@@ -301,21 +299,15 @@ export const TenantManagement: React.FC<TenantManagementProps> = ({
           <thead>
             <tr>
               <th style={styles.th}>テナント ID</th>
-              <th style={styles.th}>認証方式</th>
-              <th style={styles.th}>API Key</th>
-              <th style={styles.th}>有効化済みサービス</th>
+              <th style={styles.th}>テナント名</th>
+              <th style={styles.th}>表示名</th>
+              <th style={styles.th}>作成日時</th>
+              <th style={styles.th}>更新日時</th>
               <th style={{ ...styles.th, textAlign: 'center', width: '160px' }}>操作</th>
             </tr>
           </thead>
           <tbody>
             {filteredTenants.map((tenant) => {
-              const authMode = (tenant as any).authMode ?? (tenant as any).AuthMode ?? 0;
-              const apiKey = (tenant as any).apiKey ?? (tenant as any).ApiKey;
-
-              const modeLabel =
-                authMode === 2 ? 'Hybrid' :
-                authMode === 1 ? 'API Key のみ' : 'JWT のみ';
-
               return (
                 <tr key={tenant.tenantId} style={{ backgroundColor: '#ffffff' }}>
                   <td style={styles.td}>
@@ -327,41 +319,16 @@ export const TenantManagement: React.FC<TenantManagementProps> = ({
                     </button>
                   </td>
                   <td style={styles.td}>
-                    <span style={{ fontWeight: 600 }}>{modeLabel}</span>
+                    {tenant.tenantName}
                   </td>
                   <td style={styles.td}>
-                    {apiKey ? (
-                      <span style={styles.badge('#dff6dd', '#107c41', '#c3e6cb')}>
-                        ● 発行済み
-                      </span>
-                    ) : (
-                      <span style={styles.badge('#f3f2f1', '#605e5c', '#e1dfdd')}>
-                        未発行
-                      </span>
-                    )}
+                    {tenant.displayName}
                   </td>
                   <td style={styles.td}>
-                    {tenant.services && tenant.services.length > 0 ? (
-                      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                        {tenant.services.map((s) => (
-                          <span
-                            key={s}
-                            style={{
-                              backgroundColor: '#faf9f8',
-                              border: '1px solid #8a8886',
-                              padding: '1px 6px',
-                              borderRadius: '2px',
-                              fontSize: '11px',
-                              color: '#323130'
-                            }}
-                          >
-                            {s}
-                          </span>
-                        ))}
-                      </div>
-                    ) : (
-                      <span style={{ color: '#a19f9d' }}>なし</span>
-                    )}
+                    {new Date(tenant.createdAt).toLocaleString('ja-JP')}
+                  </td>
+                  <td style={styles.td}>
+                    {new Date(tenant.updatedAt).toLocaleString('ja-JP')}
                   </td>
                   <td style={{ ...styles.td, textAlign: 'center' }}>
                     <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
@@ -414,10 +381,12 @@ export const TenantManagement: React.FC<TenantManagementProps> = ({
               </div>
 
               <div>
-                <label style={{ fontWeight: 600, fontSize: '12px' }}>テナント表示名</label>
+                <label style={{ fontWeight: 600, fontSize: '12px' }}>
+                  テナント名
+                </label>
                 <input
                   type="text"
-                  placeholder="例: 株式会社サンプル"
+                  placeholder="例: sample"
                   value={newTenantName}
                   onChange={(e) => setNewTenantName(e.target.value)}
                   style={styles.inputField}
@@ -425,17 +394,16 @@ export const TenantManagement: React.FC<TenantManagementProps> = ({
               </div>
 
               <div>
-                <label style={{ fontWeight: 600, fontSize: '12px', display: 'block', marginBottom: '6px' }}>
-                  初期有効化サービス
+                <label style={{ fontWeight: 600, fontSize: '12px' }}>
+                  表示名
                 </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '13px' }}>
-                  <input
-                    type="checkbox"
-                    checked={selectedServices.includes('drive')}
-                    onChange={() => handleServiceToggle('drive')}
-                  />
-                  Drive
-                </label>
+                <input
+                  type="text"
+                  placeholder="例: 株式会社サンプル"
+                  value={newTenantDisplayName}
+                  onChange={(e) => setNewTenantDisplayName(e.target.value)}
+                  style={styles.inputField}
+                />
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '8px' }}>

@@ -1,206 +1,127 @@
-import React, { useState, useEffect } from 'react';
-import {
-  generateApiKey,
-  updateAuthMode,
-  migrateTenant,
-  fetchTenantMigrations,
-  fetchTenantStatus,
-  updateTenantStatus,
-  checkTenantHealth
-} from '../api';
+import React, { useState } from 'react';
 import { Tenant } from '../types';
 
 interface TenantDetailProps {
   tenant: Tenant;
   onBack: () => void;
-  onAddService: (tenantId: string, serviceKey: string) => Promise<void>;
   onRefresh: () => Promise<void>;
 }
 
-const AVAILABLE_SERVICES = [
-  { key: 'auth', label: 'Auth' },
-  { key: 'drive', label: 'Drive' },
-  { key: 'function', label: 'Function' },
-];
-
-const AUTH_MODE_LABELS: Record<number, string> = {
-  0: 'JWT (Bearer) のみ',
-  1: 'API Key のみ',
-  2: '両方許可',
-};
-
-export const TenantDetail: React.FC<TenantDetailProps> = ({
+const TenantDetail: React.FC<TenantDetailProps> = ({
   tenant,
   onBack,
-  onAddService,
   onRefresh
 }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'settings'>(
     'overview'
   );
 
-  // サービスごとのマイグレーション履歴タブの選択状態
-  const [activeMigrationService, setActiveMigrationService] = useState<string>(
-    AVAILABLE_SERVICES[0]?.key || 'drive'
-  );
-
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
 
-  const unenabledServices = AVAILABLE_SERVICES.filter(
-    (s) => !tenant.services?.includes(s.key)
-  );
+  /*
+   * =========================================================
+   * 現在の Management API OpenAPI 対応状況
+   * =========================================================
+   *
+   * 実APIとして存在:
+   *
+   * POST   /api/mng/internal/init
+   *
+   * POST   /api/mng/tenants
+   * GET    /api/mng/tenants
+   * GET    /api/mng/tenants/{tenantId}
+   * DELETE /api/mng/tenants/{tenantId}
+   *
+   * POST   /api/mng/tenants/{tenantId}/users
+   * GET    /api/mng/tenants/{tenantId}/users
+   * GET    /api/mng/tenants/{tenantId}/users/{subjectId}
+   * DELETE /api/mng/tenants/{tenantId}/users/{subjectId}
+   *
+   * 現在 OpenAPI に存在しない:
+   *
+   * - サービス管理
+   * - API Key 管理
+   * - 認証モード管理
+   * - テナントステータス管理
+   * - Migration 管理
+   * - Health Check
+   *
+   * 上記の未実装機能はバックエンドへリクエストせず、
+   * UI確認用のダミー処理としている。
+   */
 
-  const [selectedService, setSelectedService] = useState<string>(
-    unenabledServices[0]?.key || ''
-  );
+  /*
+   * =========================================================
+   * ダミー状態
+   * =========================================================
+   *
+   * バックエンド側にAPIが追加されたら、
+   * それぞれ実APIへ置き換える。
+   */
 
-  const [actionLoading, setActionLoading] = useState<boolean>(false);
-  const [migrationLoading, setMigrationLoading] = useState<boolean>(false);
+  const [dummyTenantStatus, setDummyTenantStatus] = useState<
+    'active' | 'suspended'
+  >('active');
 
-  const [migrations, setMigrations] = useState<
-    { serviceKey?: string; migrationName: string; appliedAt: string }[]
-  >([]);
+  const [dummyAuthMode, setDummyAuthMode] = useState<number>(0);
 
-  const [loadingMigrations, setLoadingMigrations] = useState<boolean>(false);
+  const [dummyApiKey, setDummyApiKey] = useState<string | null>(null);
 
-  const [healthStatus, setHealthStatus] = useState<{
+  const [dummyHealthStatus, setDummyHealthStatus] = useState<{
     dbStatus: string;
     storageStatus: string;
     message: string;
   } | null>(null);
 
-  const [healthLoading, setHealthLoading] = useState<boolean>(false);
+  const [dummyMigrations] = useState<
+    {
+      serviceKey?: string;
+      migrationName: string;
+      appliedAt: string;
+    }[]
+  >([]);
 
-  const initialAuthMode = (tenant as any).authMode ?? (tenant as any).AuthMode;
-  const initialApiKey = (tenant as any).apiKey ?? (tenant as any).ApiKey;
+  const [activeMigrationService, setActiveMigrationService] =
+    useState('auth');
 
-  const [apiKey, setApiKey] = useState<string | null>(
-    initialApiKey || null
-  );
-
-  const [authMode, setAuthMode] = useState<number>(
-    typeof initialAuthMode === 'number' ? initialAuthMode : 0
-  );
+  const [isCopied, setIsCopied] = useState(false);
 
   /*
-   * テナントステータス
-   *
-   * TenantInfo からではなく、
-   * GET /api/mng/tenants/{tenantId}/status
-   * で取得する。
+   * =========================================================
+   * ダミー: サービス管理
+   * =========================================================
    */
-  const [tenantStatus, setTenantStatus] = useState<
-    'active' | 'suspended'
-  >('active');
 
-  const [isCopied, setIsCopied] = useState<boolean>(false);
-
-  /**
-   * テナントの現在のステータスを取得
-   */
-  const loadTenantStatus = async () => {
-    try {
-      const data = await fetchTenantStatus(tenant.tenantId);
-
-      if (data.status === 'active' || data.status === 'suspended') {
-        setTenantStatus(data.status);
-      }
-    } catch (err) {
-      console.error(
-        'テナントステータスの取得に失敗しました。',
-        err
-      );
-
-      setError(
-        'テナントのステータス取得に失敗しました。'
-      );
-    }
-  };
-
-  /**
-   * テナント情報が変更されたときに各種情報を再取得
-   */
-  useEffect(() => {
-    const currentAuthMode =
-      (tenant as any).authMode ?? (tenant as any).AuthMode;
-
-    const currentApiKey =
-      (tenant as any).apiKey ?? (tenant as any).ApiKey;
-
-    if (typeof currentAuthMode === 'number') {
-      setAuthMode(currentAuthMode);
-    }
-
-    setApiKey(currentApiKey || null);
-
-    loadTenantStatus();
-    loadMigrations();
-
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tenant]);
-
-  /**
-   * マイグレーション履歴を取得
-   */
-  const loadMigrations = async () => {
-    setLoadingMigrations(true);
-
-    try {
-      const data = await fetchTenantMigrations(tenant.tenantId);
-      setMigrations(data);
-    } catch (err) {
-      setMigrations([]);
-    } finally {
-      setLoadingMigrations(false);
-    }
-  };
-
-  /**
-   * サービスを有効化
-   */
-  const handleEnableService = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!selectedService) return;
-
+  const handleEnableService = async (
+    serviceKey: string
+  ) => {
     setActionLoading(true);
     setError(null);
     setSuccessMessage(null);
 
     try {
-      await onAddService(
-        tenant.tenantId,
-        selectedService
-      );
+      await new Promise((resolve) => setTimeout(resolve, 300));
 
       setSuccessMessage(
-        `サービス '${selectedService}' を有効化しました。`
-      );
-
-      const updatedUnenabled = unenabledServices.filter(
-        (s) => s.key !== selectedService
-      );
-
-      setSelectedService(
-        updatedUnenabled[0]?.key || ''
-      );
-    } catch (err: any) {
-      setError(
-        err.message ||
-          'サービスの有効化に失敗しました。'
+        `サービス '${serviceKey}' の有効化処理はダミーです。` +
+          'バックエンド API 実装後に接続してください。'
       );
     } finally {
       setActionLoading(false);
     }
   };
 
-  /**
-   * API Key を発行
+  /*
+   * =========================================================
+   * ダミー: API Key 発行
+   * =========================================================
    */
+
   const handleGenerateApiKey = async () => {
     if (
-      apiKey &&
+      dummyApiKey &&
       !window.confirm(
         'API Key を再発行すると既存のキーは無効になります。よろしいですか？'
       )
@@ -213,30 +134,28 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
     setSuccessMessage(null);
 
     try {
-      const res = await generateApiKey(
-        tenant.tenantId
-      );
+      await new Promise((resolve) => setTimeout(resolve, 300));
 
-      setApiKey(res.apiKey);
+      const generatedKey =
+        `dummy_${tenant.tenantId}_${Date.now()}`;
+
+      setDummyApiKey(generatedKey);
 
       setSuccessMessage(
-        '新しい API Key を発行しました。安全な場所に保存してください。'
-      );
-
-      await onRefresh();
-    } catch (err: any) {
-      setError(
-        err.message ||
-          'API Key の発行に失敗しました。'
+        'API Key は現在ダミー表示です。' +
+          'バックエンド API 実装後に接続してください。'
       );
     } finally {
       setActionLoading(false);
     }
   };
 
-  /**
-   * 認証モード変更
+  /*
+   * =========================================================
+   * ダミー: 認証モード変更
+   * =========================================================
    */
+
   const handleAuthModeChange = async (
     newMode: number
   ) => {
@@ -245,31 +164,25 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
     setSuccessMessage(null);
 
     try {
-      await updateAuthMode(
-        tenant.tenantId,
-        newMode
-      );
+      await new Promise((resolve) => setTimeout(resolve, 300));
 
-      setAuthMode(newMode);
+      setDummyAuthMode(newMode);
 
       setSuccessMessage(
-        '認証モードを更新しました。'
-      );
-
-      await onRefresh();
-    } catch (err: any) {
-      setError(
-        err.message ||
-          '認証モードの更新に失敗しました。'
+        '認証モードは現在ダミー表示です。' +
+          'バックエンド API 実装後に接続してください。'
       );
     } finally {
       setActionLoading(false);
     }
   };
 
-  /**
-   * テナントステータス変更
+  /*
+   * =========================================================
+   * ダミー: テナントステータス変更
+   * =========================================================
    */
+
   const handleStatusChange = async (
     newStatus: 'active' | 'suspended'
   ) => {
@@ -291,120 +204,102 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
     setSuccessMessage(null);
 
     try {
-      await updateTenantStatus(
-        tenant.tenantId,
-        newStatus
-      );
+      await new Promise((resolve) => setTimeout(resolve, 300));
 
-      /*
-       * PATCH の結果をそのまま信用するのではなく、
-       * GET /status でDB上の最新状態を取得する。
-       */
-      await loadTenantStatus();
+      setDummyTenantStatus(newStatus);
 
       setSuccessMessage(
-        `テナントを${actionName}しました。`
-      );
-
-      await onRefresh();
-    } catch (err: any) {
-      setError(
-        err.response?.data?.error ||
-          err.message ||
-          `テナントの${actionName}に失敗しました。`
+        `テナントを${actionName}しました（ダミー処理）。`
       );
     } finally {
       setActionLoading(false);
     }
   };
 
-  /**
-   * マイグレーション実行
+  /*
+   * =========================================================
+   * ダミー: Migration
+   * =========================================================
    */
+
   const handleMigrate = async () => {
-    const service = AVAILABLE_SERVICES.find(
-      (s) =>
-        s.key === activeMigrationService
-    );
-
-    const serviceLabel =
-      service?.label ||
-      activeMigrationService;
-
     if (
       !window.confirm(
-        `テナント '${tenant.tenantId}' の ${serviceLabel} サービスのデータベースマイグレーションを実行しますか？`
+        `テナント '${tenant.tenantId}' の ` +
+          `${activeMigrationService} サービスの ` +
+          'データベースマイグレーションを実行しますか？'
       )
     ) {
       return;
     }
 
-    setMigrationLoading(true);
+    setActionLoading(true);
     setError(null);
     setSuccessMessage(null);
 
     try {
-      const res = await migrateTenant(
-        tenant.tenantId,
-        activeMigrationService
-      );
+      await new Promise((resolve) => setTimeout(resolve, 300));
 
       setSuccessMessage(
-        res.message ||
-          `テナント '${tenant.tenantId}' の ${serviceLabel} のマイグレーションが完了しました。`
-      );
-
-      await loadMigrations();
-    } catch (err: any) {
-      setError(
-        err.response?.data?.error ||
-          err.message ||
-          `${serviceLabel} のマイグレーションの実行に失敗しました。`
+        'マイグレーションは現在ダミー処理です。' +
+          'バックエンド API 実装後に接続してください。'
       );
     } finally {
-      setMigrationLoading(false);
+      setActionLoading(false);
     }
   };
 
-  /**
-   * ヘルスチェック
+  /*
+   * =========================================================
+   * ダミー: Health Check
+   * =========================================================
    */
+
   const handleHealthCheck = async () => {
-    setHealthLoading(true);
-    setHealthStatus(null);
+    setActionLoading(true);
     setError(null);
+    setDummyHealthStatus(null);
 
     try {
-      const res = await checkTenantHealth(
-        tenant.tenantId
-      );
+      await new Promise((resolve) => setTimeout(resolve, 300));
 
-      setHealthStatus(res);
-    } catch (err: any) {
-      setError(
-        err.response?.data?.error ||
-          'ヘルスチェックの実行に失敗しました。'
-      );
+      setDummyHealthStatus({
+        dbStatus: 'healthy',
+        storageStatus: 'healthy',
+        message:
+          'Health Check API は現在 OpenAPI に存在しないため、' +
+          'ダミーデータを表示しています。'
+      });
     } finally {
-      setHealthLoading(false);
+      setActionLoading(false);
     }
   };
 
-  /**
+  /*
+   * =========================================================
    * API Key コピー
+   * =========================================================
    */
-  const handleCopyApiKey = () => {
-    if (apiKey) {
-      navigator.clipboard.writeText(apiKey);
 
-      setIsCopied(true);
-
-      setTimeout(
-        () => setIsCopied(false),
-        2000
-      );
+  const handleCopyApiKey = async () => {
+    if (!dummyApiKey) {
+      return;
     }
+
+    await navigator.clipboard.writeText(dummyApiKey);
+
+    setIsCopied(true);
+
+    setTimeout(() => {
+      setIsCopied(false);
+    }, 2000);
   };
+
+  /*
+   * =========================================================
+   * Styles
+   * =========================================================
+   */
 
   const styles = {
     container: {
@@ -487,12 +382,6 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
       color: '#1b1b1b'
     },
 
-    managementSectionDescription: {
-      margin: '0 0 16px 0',
-      fontSize: '12px',
-      color: '#605e5c'
-    },
-
     managementItem: {
       display: 'flex',
       flexDirection: 'column' as const,
@@ -506,12 +395,6 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
       fontSize: '13px',
       color: '#323130',
       fontWeight: 600
-    },
-
-    infoIcon: {
-      color: '#605e5c',
-      fontSize: '12px',
-      cursor: 'help'
     },
 
     inputSelect: {
@@ -560,32 +443,15 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
       fontSize: '13px',
       fontWeight: 600,
       cursor: 'pointer'
-    },
-
-    subTabBar: {
-      display: 'flex',
-      gap: '24px',
-      borderBottom: '1px solid #e1dfdd',
-      marginBottom: '12px'
-    },
-
-    subTabButton: (isActive: boolean) => ({
-      background: 'none',
-      border: 'none',
-      padding: '4px 0 8px 0',
-      fontSize: '13px',
-      fontWeight: isActive ? 600 : 400,
-      color: isActive ? '#0078d4' : '#323130',
-      cursor: 'pointer',
-      position: 'relative' as const,
-      boxShadow: isActive
-        ? 'inset 0 -2px 0 0 #0078d4'
-        : 'none'
-    })
+    }
   };
 
   return (
     <div style={styles.container}>
+      {/* =====================================================
+          戻る
+         ===================================================== */}
+
       <button
         onClick={onBack}
         style={styles.backButton}
@@ -593,12 +459,13 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
         &larr; テナント一覧に戻る
       </button>
 
-      {/* メインタブ切り替え */}
+      {/* =====================================================
+          タブ
+         ===================================================== */}
+
       <div style={styles.tabBar}>
         <button
-          onClick={() =>
-            setActiveTab('overview')
-          }
+          onClick={() => setActiveTab('overview')}
           style={styles.tabButton(
             activeTab === 'overview'
           )}
@@ -607,9 +474,7 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
         </button>
 
         <button
-          onClick={() =>
-            setActiveTab('settings')
-          }
+          onClick={() => setActiveTab('settings')}
           style={styles.tabButton(
             activeTab === 'settings'
           )}
@@ -617,6 +482,10 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
           構成・設定
         </button>
       </div>
+
+      {/* =====================================================
+          タイトル
+         ===================================================== */}
 
       <h2 style={styles.title}>
         テナントの詳細
@@ -632,8 +501,12 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
         >
           {tenant.tenantId}
         </span>{' '}
-        の各種設定および有効化サービスを管理します。
+        の詳細情報を表示します。
       </p>
+
+      {/* =====================================================
+          エラー
+         ===================================================== */}
 
       {error && (
         <div
@@ -650,6 +523,10 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
         </div>
       )}
 
+      {/* =====================================================
+          成功メッセージ
+         ===================================================== */}
+
       {successMessage && (
         <div
           style={{
@@ -665,19 +542,32 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
         </div>
       )}
 
-      {/* =========================================================
-          タブ 1: 基本情報
-          ========================================================= */}
+      {/* =====================================================
+          基本情報
+         ===================================================== */}
+
       {activeTab === 'overview' && (
         <div style={styles.sectionContainer}>
-          {/* 現在のステータス */}
-          <div style={styles.managementSection}>
-            <h3
-              style={
-                styles.managementSectionTitle
+          {/* =================================================
+              テナント基本情報
+
+              GET
+              /api/mng/tenants/{tenantId}
+
+              実際のレスポンス:
+
+              {
+                "tenantId": "flaubert",
+                "tenantName": "flaubert",
+                "displayName": "flaubert",
+                "createdAt": "...",
+                "updatedAt": "..."
               }
-            >
-              現在のステータス
+             ================================================= */}
+
+          <div style={styles.managementSection}>
+            <h3 style={styles.managementSectionTitle}>
+              テナント基本情報
             </h3>
 
             <div
@@ -689,23 +579,94 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
                 alignItems: 'center'
               }}
             >
-              <span
-                style={
-                  styles.managementItemLabel
-                }
+              <span style={styles.managementItemLabel}>
+                テナントID
+              </span>
+
+              <div
+                style={{
+                  fontFamily: 'monospace',
+                  fontWeight: 600
+                }}
               >
-                ライセンス状況
-                <span
-                  style={styles.infoIcon}
-                  title="テナントの稼働または一時停止"
-                >
-                  ⓘ
-                </span>
+                {tenant.tenantId}
+              </div>
+
+              <span style={styles.managementItemLabel}>
+                テナント名
               </span>
 
               <div>
-                {tenantStatus ===
-                'suspended' ? (
+                {tenant.tenantName}
+              </div>
+
+              <span style={styles.managementItemLabel}>
+                表示名
+              </span>
+
+              <div>
+                {tenant.displayName}
+              </div>
+
+              <span style={styles.managementItemLabel}>
+                作成日時
+              </span>
+
+              <div>
+                {new Date(
+                  tenant.createdAt
+                ).toLocaleString('ja-JP')}
+              </div>
+
+              <span style={styles.managementItemLabel}>
+                更新日時
+              </span>
+
+              <div>
+                {new Date(
+                  tenant.updatedAt
+                ).toLocaleString('ja-JP')}
+              </div>
+            </div>
+          </div>
+
+          {/* =================================================
+              現在のステータス
+
+              OpenAPI に存在しないためダミー
+             ================================================= */}
+
+          <div style={styles.managementSection}>
+            <h3 style={styles.managementSectionTitle}>
+              現在のステータス
+            </h3>
+
+            <p
+              style={{
+                margin: '0 0 16px 0',
+                color: '#605e5c',
+                fontSize: '12px'
+              }}
+            >
+              ※ テナントステータス API は現在の
+              OpenAPI に存在しないため、ダミーデータを表示しています。
+            </p>
+
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '200px 1fr',
+                rowGap: '16px',
+                columnGap: '12px',
+                alignItems: 'center'
+              }}
+            >
+              <span style={styles.managementItemLabel}>
+                ステータス
+              </span>
+
+              <div>
+                {dummyTenantStatus === 'suspended' ? (
                   <span
                     style={{
                       color: '#a80000',
@@ -725,172 +686,65 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
                   </span>
                 )}
               </div>
-
-              <span
-                style={
-                  styles.managementItemLabel
-                }
-              >
-                現在の認証方式
-                <span
-                  style={styles.infoIcon}
-                  title="設定されている認証モード"
-                >
-                  ⓘ
-                </span>
-              </span>
-
-              <div
-                style={{
-                  fontWeight: 600
-                }}
-              >
-                {AUTH_MODE_LABELS[authMode] ||
-                  '不明'}
-              </div>
-
-              <span
-                style={
-                  styles.managementItemLabel
-                }
-              >
-                API Key ステータス
-                <span
-                  style={styles.infoIcon}
-                  title="API Keyの有無"
-                >
-                  ⓘ
-                </span>
-              </span>
-
-              <div>
-                {apiKey ? (
-                  <span
-                    style={{
-                      color: '#107c41',
-                      fontWeight: 600
-                    }}
-                  >
-                    ● 発行済み
-                  </span>
-                ) : (
-                  <span
-                    style={{
-                      color: '#a19f9d'
-                    }}
-                  >
-                    未発行
-                  </span>
-                )}
-              </div>
-
-              <span
-                style={
-                  styles.managementItemLabel
-                }
-              >
-                有効化済みサービス
-                <span
-                  style={styles.infoIcon}
-                  title="利用可能なサービス"
-                >
-                  ⓘ
-                </span>
-              </span>
-
-              <div>
-                {tenant.services &&
-                tenant.services.length > 0 ? (
-                  <div
-                    style={{
-                      display: 'flex',
-                      gap: '6px',
-                      flexWrap: 'wrap'
-                    }}
-                  >
-                    {tenant.services.map(
-                      (s) => (
-                        <span
-                          key={s}
-                          style={{
-                            backgroundColor:
-                              '#f3f2f1',
-                            border:
-                              '1px solid #8a8886',
-                            padding:
-                              '2px 8px',
-                            borderRadius:
-                              '2px',
-                            fontSize: '12px'
-                          }}
-                        >
-                          {s}
-                        </span>
-                      )
-                    )}
-                  </div>
-                ) : (
-                  <span
-                    style={{
-                      color: '#a19f9d'
-                    }}
-                  >
-                    なし
-                  </span>
-                )}
-              </div>
             </div>
           </div>
 
-          {/* システム疎通確認 */}
+          {/* =================================================
+              Health Check
+
+              OpenAPI に存在しないためダミー
+             ================================================= */}
+
           <div style={styles.managementSection}>
-            <h3
-              style={
-                styles.managementSectionTitle
-              }
-            >
+            <h3 style={styles.managementSectionTitle}>
               システム疎通確認
             </h3>
+
+            <p
+              style={{
+                margin: '0 0 12px 0',
+                color: '#605e5c',
+                fontSize: '12px'
+              }}
+            >
+              ※ Health Check API は現在の OpenAPI に存在しないため、
+              ダミー結果を表示します。
+            </p>
 
             <button
               type="button"
               onClick={handleHealthCheck}
-              disabled={healthLoading}
+              disabled={actionLoading}
               style={styles.secondaryButton}
             >
-              {healthLoading
+              {actionLoading
                 ? 'テスト実行中...'
                 : '接続テストを実行'}
             </button>
 
-            {healthStatus && (
+            {dummyHealthStatus && (
               <div
                 style={{
                   marginTop: '12px',
                   padding: '12px',
-                  backgroundColor:
-                    '#f3f2f1',
+                  backgroundColor: '#f3f2f1',
                   borderRadius: '2px',
                   fontSize: '12px'
                 }}
               >
                 <div>
                   <strong>DB状態:</strong>{' '}
-                  {healthStatus.dbStatus}
+                  {dummyHealthStatus.dbStatus}
                 </div>
 
                 <div>
-                  <strong>
-                    ストレージ状態:
-                  </strong>{' '}
-                  {healthStatus.storageStatus}
+                  <strong>ストレージ状態:</strong>{' '}
+                  {dummyHealthStatus.storageStatus}
                 </div>
 
                 <div>
-                  <strong>
-                    メッセージ:
-                  </strong>{' '}
-                  {healthStatus.message}
+                  <strong>メッセージ:</strong>{' '}
+                  {dummyHealthStatus.message}
                 </div>
               </div>
             )}
@@ -898,622 +752,330 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
         </div>
       )}
 
-      {/* =========================================================
-          タブ 2: 構成・設定
-          ========================================================= */}
+      {/* =====================================================
+          構成・設定
+         ===================================================== */}
+
       {activeTab === 'settings' && (
         <div style={styles.sectionContainer}>
-          {/* =====================================================
-              1. 認証方式の管理
-              ===================================================== */}
+          {/* =================================================
+              認証方式
+
+              OpenAPI に存在しないためダミー
+             ================================================= */}
+
           <div style={styles.managementSection}>
-            <h3
-              style={
-                styles.managementSectionTitle
-              }
-            >
+            <h3 style={styles.managementSectionTitle}>
               認証方式の管理
             </h3>
 
-            <div
+            <p
               style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '20px'
+                margin: '0 0 16px 0',
+                color: '#605e5c',
+                fontSize: '12px'
               }}
             >
-              {/* 認証方式 */}
-              <div
-                style={
-                  styles.managementItem
+              ※ 認証モード変更 API は現在の OpenAPI に存在しないため、
+              以下はダミー設定です。
+            </p>
+
+            <div style={styles.managementItem}>
+              <label style={styles.managementItemLabel}>
+                認証方式
+              </label>
+
+              <select
+                value={dummyAuthMode}
+                onChange={(e) =>
+                  handleAuthModeChange(
+                    Number(e.target.value)
+                  )
                 }
+                disabled={actionLoading}
+                style={styles.inputSelect}
               >
-                <label
-                  style={
-                    styles.managementItemLabel
-                  }
-                >
-                  認証方式
-                  <span
-                    style={{
-                      color: '#a80000'
-                    }}
-                  >
-                    *
-                  </span>
-                </label>
+                <option value={0}>
+                  JWT (Bearer) のみ
+                </option>
 
-                <select
-                  value={authMode}
-                  onChange={(e) =>
-                    handleAuthModeChange(
-                      Number(
-                        e.target.value
-                      )
-                    )
-                  }
-                  disabled={actionLoading}
-                  style={
-                    styles.inputSelect
-                  }
-                >
-                  <option value={0}>
-                    JWT (Bearer) のみ
-                  </option>
-                  <option value={1}>
-                    API Key のみ
-                  </option>
-                  <option value={2}>
-                    両方許可
-                  </option>
-                </select>
-              </div>
+                <option value={1}>
+                  API Key のみ
+                </option>
 
-              {/* API Key */}
-              <div
-                style={{
-                  paddingTop: '16px',
-                  borderTop:
-                    '1px solid #e1dfdd'
-                }}
-              >
-                <div
-                  style={
-                    styles.managementItem
-                  }
-                >
-                  <label
-                    style={
-                      styles.managementItemLabel
-                    }
-                  >
-                    API Key 管理
-                    <span
-                      style={{
-                        color: '#a80000'
-                      }}
-                    >
-                      *
-                    </span>
-                  </label>
-
-                  <div
-                    style={{
-                      display: 'flex',
-                      gap: '8px',
-                      alignItems:
-                        'center',
-                      flexWrap:
-                        'wrap'
-                    }}
-                  >
-                    <button
-                      onClick={
-                        handleGenerateApiKey
-                      }
-                      disabled={
-                        actionLoading
-                      }
-                      style={
-                        styles.primaryButton
-                      }
-                    >
-                      {apiKey
-                        ? 'API Key を再発行'
-                        : 'API Key を新規発行'}
-                    </button>
-
-                    {apiKey && (
-                      <div
-                        style={{
-                          display:
-                            'flex',
-                          gap: '8px',
-                          width:
-                            '100%',
-                          maxWidth:
-                            '480px',
-                          marginTop:
-                            '8px'
-                        }}
-                      >
-                        <input
-                          type="text"
-                          readOnly
-                          value={
-                            apiKey
-                          }
-                          style={{
-                            ...styles.inputSelect,
-                            flex: 1,
-                            fontFamily:
-                              'monospace'
-                          }}
-                        />
-
-                        <button
-                          onClick={
-                            handleCopyApiKey
-                          }
-                          style={
-                            styles.secondaryButton
-                          }
-                        >
-                          {isCopied
-                            ? 'コピー完了'
-                            : 'コピー'}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
+                <option value={2}>
+                  両方許可
+                </option>
+              </select>
             </div>
           </div>
 
-          {/* =====================================================
-              2. サービスの管理
-              ===================================================== */}
+          {/* =================================================
+              API Key
+
+              OpenAPI に存在しないためダミー
+             ================================================= */}
+
           <div style={styles.managementSection}>
-            <h3
-              style={
-                styles.managementSectionTitle
-              }
+            <h3 style={styles.managementSectionTitle}>
+              API Key 管理
+            </h3>
+
+            <p
+              style={{
+                margin: '0 0 16px 0',
+                color: '#605e5c',
+                fontSize: '12px'
+              }}
             >
+              ※ API Key 発行 API は現在の OpenAPI に存在しません。
+              UI確認用のダミーキーのみ生成します。
+            </p>
+
+            <div style={styles.managementItem}>
+              <button
+                onClick={handleGenerateApiKey}
+                disabled={actionLoading}
+                style={styles.primaryButton}
+              >
+                {dummyApiKey
+                  ? 'API Key を再発行（ダミー）'
+                  : 'API Key を新規発行（ダミー）'}
+              </button>
+
+              {dummyApiKey && (
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: '8px',
+                    width: '100%',
+                    maxWidth: '560px',
+                    marginTop: '8px'
+                  }}
+                >
+                  <input
+                    type="text"
+                    readOnly
+                    value={dummyApiKey}
+                    style={{
+                      ...styles.inputSelect,
+                      flex: 1,
+                      fontFamily: 'monospace'
+                    }}
+                  />
+
+                  <button
+                    onClick={handleCopyApiKey}
+                    style={styles.secondaryButton}
+                  >
+                    {isCopied
+                      ? 'コピー完了'
+                      : 'コピー'}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* =================================================
+              サービス管理
+
+              OpenAPI に存在しないためダミー
+             ================================================= */}
+
+          <div style={styles.managementSection}>
+            <h3 style={styles.managementSectionTitle}>
               サービスの管理
             </h3>
 
-            <div
+            <p
               style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '20px'
+                margin: '0 0 16px 0',
+                color: '#605e5c',
+                fontSize: '12px'
               }}
             >
-              {/* 有効化済みサービス */}
-              <div
-                style={
-                  styles.managementItem
-                }
-              >
-                <label
-                  style={
-                    styles.managementItemLabel
-                  }
-                >
-                  有効化済みサービス
-                </label>
+              ※ サービス管理 API は現在の OpenAPI に存在しません。
+              以下の操作はダミーです。
+            </p>
 
-                {tenant.services &&
-                tenant.services.length > 0 ? (
-                  <div
-                    style={{
-                      display: 'flex',
-                      gap: '6px',
-                      flexWrap: 'wrap'
-                    }}
-                  >
-                    {tenant.services.map(
-                      (s) => (
-                        <span
-                          key={s}
-                          style={{
-                            backgroundColor:
-                              '#f3f2f1',
-                            border:
-                              '1px solid #8a8886',
-                            padding:
-                              '2px 8px',
-                            borderRadius:
-                              '2px',
-                            fontSize:
-                              '12px'
-                          }}
-                        >
-                          {s}
-                        </span>
-                      )
-                    )}
-                  </div>
-                ) : (
-                  <span
-                    style={{
-                      color: '#a19f9d'
-                    }}
-                  >
-                    なし
-                  </span>
-                )}
-              </div>
+            <div style={styles.managementItem}>
+              <label style={styles.managementItemLabel}>
+                サービス
+              </label>
 
-              {/* 追加サービス */}
               <div
                 style={{
-                  paddingTop: '16px',
-                  borderTop:
-                    '1px solid #e1dfdd'
+                  display: 'flex',
+                  gap: '8px',
+                  flexWrap: 'wrap'
                 }}
               >
-                <div
-                  style={
-                    styles.managementItem
-                  }
-                >
-                  <label
-                    style={
-                      styles.managementItemLabel
-                    }
-                  >
-                    追加サービス有効化
-                  </label>
-
-                  {unenabledServices.length >
-                  0 ? (
-                    <form
-                      onSubmit={
-                        handleEnableService
+                {['auth', 'drive', 'function'].map(
+                  (service) => (
+                    <button
+                      key={service}
+                      type="button"
+                      onClick={() =>
+                        handleEnableService(service)
                       }
-                      style={{
-                        display:
-                          'flex',
-                        gap: '12px',
-                        alignItems:
-                          'center'
-                      }}
+                      disabled={actionLoading}
+                      style={styles.secondaryButton}
                     >
-                      <select
-                        value={
-                          selectedService
-                        }
-                        onChange={(
-                          e
-                        ) =>
-                          setSelectedService(
-                            e.target
-                              .value
-                          )
-                        }
-                        disabled={
-                          actionLoading
-                        }
-                        style={
-                          styles.inputSelect
-                        }
-                      >
-                        {unenabledServices.map(
-                          (s) => (
-                            <option
-                              key={
-                                s.key
-                              }
-                              value={
-                                s.key
-                              }
-                            >
-                              {
-                                s.label
-                              }
-                            </option>
-                          )
-                        )}
-                      </select>
-
-                      <button
-                        type="submit"
-                        disabled={
-                          actionLoading ||
-                          !selectedService
-                        }
-                        style={{
-                          ...styles.primaryButton,
-                          backgroundColor:
-                            '#107c41'
-                        }}
-                      >
-                        有効化
-                      </button>
-                    </form>
-                  ) : (
-                    <p
-                      style={{
-                        margin: 0,
-                        color:
-                          '#605e5c'
-                      }}
-                    >
-                      追加可能なサービスはすべて有効化されています。
-                    </p>
-                  )}
-                </div>
+                      {service} を有効化（ダミー）
+                    </button>
+                  )
+                )}
               </div>
             </div>
           </div>
 
-          {/* =====================================================
-              3. データベースの管理
-              ===================================================== */}
+          {/* =================================================
+              Migration
+
+              OpenAPI に存在しないためダミー
+             ================================================= */}
+
           <div style={styles.managementSection}>
-            <h3
-              style={
-                styles.managementSectionTitle
-              }
-            >
+            <h3 style={styles.managementSectionTitle}>
               データベースの管理
             </h3>
 
-            {/* マイグレーション実行 */}
-            <div
-              style={
-                styles.managementItem
-              }
+            <p
+              style={{
+                margin: '0 0 16px 0',
+                color: '#605e5c',
+                fontSize: '12px'
+              }}
             >
-              <label
-                style={
-                  styles.managementItemLabel
-                }
-              >
+              ※ Migration API は現在の OpenAPI に存在しません。
+              以下の操作はダミーです。
+            </p>
+
+            <div style={styles.managementItem}>
+              <label style={styles.managementItemLabel}>
                 スキーママイグレーション
               </label>
 
-              <div>
-                <button
-                  type="button"
-                  onClick={
-                    handleMigrate
-                  }
-                  disabled={
-                    migrationLoading ||
-                    actionLoading
-                  }
-                  style={{
-                    ...styles.secondaryButton,
-                    fontWeight: 600
-                  }}
-                >
-                  {migrationLoading
-                    ? 'マイグレーション実行中...'
-                    : 'データベースのマイグレーションを実行'}
-                </button>
-              </div>
+              <select
+                value={activeMigrationService}
+                onChange={(e) =>
+                  setActiveMigrationService(
+                    e.target.value
+                  )
+                }
+                disabled={actionLoading}
+                style={styles.inputSelect}
+              >
+                <option value="auth">
+                  Auth
+                </option>
+
+                <option value="drive">
+                  Drive
+                </option>
+
+                <option value="function">
+                  Function
+                </option>
+              </select>
+
+              <button
+                type="button"
+                onClick={handleMigrate}
+                disabled={actionLoading}
+                style={styles.secondaryButton}
+              >
+                {actionLoading
+                  ? 'マイグレーション実行中...'
+                  : 'マイグレーションを実行（ダミー）'}
+              </button>
             </div>
 
-            {/* 履歴 */}
             <div
               style={{
                 marginTop: '20px',
                 paddingTop: '16px',
-                borderTop:
-                  '1px solid #e1dfdd'
+                borderTop: '1px solid #e1dfdd'
               }}
             >
+              <label style={styles.managementItemLabel}>
+                マイグレーション履歴
+              </label>
+
               <div
-                style={
-                  styles.managementItem
-                }
+                style={{
+                  marginTop: '8px',
+                  padding: '12px',
+                  backgroundColor: '#faf9f8',
+                  border: '1px solid #e1dfdd',
+                  borderRadius: '2px'
+                }}
               >
-                <label
-                  style={
-                    styles.managementItemLabel
-                  }
-                >
-                  マイグレーション履歴
-                </label>
-
-                <div
-                  style={{
-                    maxWidth:
-                      '540px'
-                  }}
-                >
-                  <div
-                    style={
-                      styles.subTabBar
-                    }
-                  >
-                    {AVAILABLE_SERVICES.map(
-                      (service) => (
-                        <button
-                          key={
-                            service.key
-                          }
-                          onClick={() =>
-                            setActiveMigrationService(
-                              service.key
-                            )
-                          }
-                          style={styles.subTabButton(
-                            activeMigrationService ===
-                              service.key
-                          )}
-                        >
-                          {
-                            service.label
-                          }
-                        </button>
-                      )
-                    )}
-                  </div>
-
-                  <div
+                {dummyMigrations.length === 0 ? (
+                  <span
                     style={{
-                      padding:
-                        '12px',
-                      backgroundColor:
-                        '#faf9f8',
-                      border:
-                        '1px solid #e1dfdd',
-                      borderRadius:
-                        '2px',
-                      maxHeight:
-                        '160px',
-                      overflowY:
-                        'auto'
+                      fontSize: '12px',
+                      color: '#a19f9d'
                     }}
                   >
-                    {loadingMigrations ? (
-                      <div
-                        style={{
-                          fontSize:
-                            '12px',
-                          color:
-                            '#605e5c'
-                        }}
-                      >
-                        履歴を読み込み中...
+                    適用済みの履歴はありません（ダミー）
+                  </span>
+                ) : (
+                  dummyMigrations.map(
+                    (migration, index) => (
+                      <div key={index}>
+                        {migration.migrationName}
                       </div>
-                    ) : (
-                      (() => {
-                        const filteredMigrations =
-                          migrations.filter(
-                            (m) =>
-                              (m.serviceKey ||
-                                'drive') ===
-                              activeMigrationService
-                          );
-
-                        return filteredMigrations.length >
-                          0 ? (
-                          <ul
-                            style={{
-                              margin: 0,
-                              paddingLeft:
-                                '16px',
-                              fontSize:
-                                '12px',
-                              color:
-                                '#605e5c'
-                            }}
-                          >
-                            {filteredMigrations.map(
-                              (
-                                m,
-                                idx
-                              ) => (
-                                <li
-                                  key={
-                                    idx
-                                  }
-                                  style={{
-                                    marginBottom:
-                                      '4px'
-                                  }}
-                                >
-                                  <span
-                                    style={{
-                                      fontFamily:
-                                        'monospace',
-                                      fontWeight:
-                                        600
-                                    }}
-                                  >
-                                    {
-                                      m.migrationName
-                                    }
-                                  </span>
-
-                                  <span
-                                    style={{
-                                      color:
-                                        '#a19f9d',
-                                      marginLeft:
-                                        '8px'
-                                    }}
-                                  >
-                                    (
-                                    {new Date(
-                                      m.appliedAt
-                                    ).toLocaleString()}
-                                    )
-                                  </span>
-                                </li>
-                              )
-                            )}
-                          </ul>
-                        ) : (
-                          <div
-                            style={{
-                              fontSize:
-                                '12px',
-                              color:
-                                '#a19f9d'
-                            }}
-                          >
-                            適用済みの履歴はありません（未有効化または未実行）
-                          </div>
-                        );
-                      })()
-                    )}
-                  </div>
-                </div>
+                    )
+                  )
+                )}
               </div>
             </div>
           </div>
 
-          {/* =====================================================
-              4. テナント運用の管理
-              ===================================================== */}
+          {/* =================================================
+              テナント運用
+
+              OpenAPI に存在しないためダミー
+             ================================================= */}
+
           <div style={styles.managementSection}>
-            <h3
-              style={
-                styles.managementSectionTitle
-              }
-            >
+            <h3 style={styles.managementSectionTitle}>
               テナント運用の管理
             </h3>
 
-            <div
-              style={
-                styles.managementItem
-              }
+            <p
+              style={{
+                margin: '0 0 16px 0',
+                color: '#605e5c',
+                fontSize: '12px'
+              }}
             >
-              <label
-                style={
-                  styles.managementItemLabel
-                }
-              >
-                ライセンス状況
+              ※ テナントステータス変更 API は現在の OpenAPI
+              に存在しないため、以下はダミー処理です。
+            </p>
+
+            <div style={styles.managementItem}>
+              <label style={styles.managementItemLabel}>
+                現在の状態
               </label>
 
               <div>
-                {tenantStatus ===
-                'suspended' ? (
+                {dummyTenantStatus === 'suspended' ? (
                   <span
                     style={{
-                      color:
-                        '#a80000',
-                      fontWeight:
-                        600
+                      color: '#a80000',
+                      fontWeight: 600
                     }}
                   >
-                    ● 一時停止中 (Suspended)
+                    ● 一時停止中
                   </span>
                 ) : (
                   <span
                     style={{
-                      color:
-                        '#107c41',
-                      fontWeight:
-                        600
+                      color: '#107c41',
+                      fontWeight: 600
                     }}
                   >
                     ● Active
@@ -1526,65 +1088,114 @@ export const TenantDetail: React.FC<TenantDetailProps> = ({
               style={{
                 marginTop: '20px',
                 paddingTop: '16px',
-                borderTop:
-                  '1px solid #e1dfdd'
+                borderTop: '1px solid #e1dfdd'
               }}
             >
-              <div
-                style={
-                  styles.managementItem
-                }
-              >
-                <label
-                  style={
-                    styles.managementItemLabel
+              {dummyTenantStatus === 'suspended' ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleStatusChange('active')
                   }
+                  disabled={actionLoading}
+                  style={{
+                    ...styles.primaryButton,
+                    backgroundColor: '#107c41'
+                  }}
                 >
-                  テナントの状態変更
-                </label>
+                  テナントを有効化（ダミー）
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleStatusChange('suspended')
+                  }
+                  disabled={actionLoading}
+                  style={styles.dangerButton}
+                >
+                  テナントを一時停止（ダミー）
+                </button>
+              )}
+            </div>
+          </div>
 
-                <div>
-                  {tenantStatus ===
-                  'suspended' ? (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        handleStatusChange(
-                          'active'
-                        )
-                      }
-                      disabled={
-                        actionLoading
-                      }
-                      style={{
-                        ...styles.primaryButton,
-                        backgroundColor:
-                          '#107c41'
-                      }}
-                    >
-                      テナントを有効化 (再開) する
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        handleStatusChange(
-                          'suspended'
-                        )
-                      }
-                      disabled={
-                        actionLoading
-                      }
-                      style={
-                        styles.dangerButton
-                      }
-                    >
-                      テナントを一時停止する
-                    </button>
-                  )}
-                </div>
+          {/* =================================================
+              OpenAPI 対応状況
+             ================================================= */}
+
+          <div style={styles.managementSection}>
+            <h3 style={styles.managementSectionTitle}>
+              OpenAPI 対応状況
+            </h3>
+
+            <div
+              style={{
+                fontSize: '12px',
+                color: '#605e5c',
+                lineHeight: 1.8
+              }}
+            >
+              <div>
+                ✓ テナント取得:
+                GET /api/mng/tenants/{'{tenantId}'}
+              </div>
+
+              <div>
+                ✓ テナント一覧:
+                GET /api/mng/tenants
+              </div>
+
+              <div>
+                ✓ テナント作成:
+                POST /api/mng/tenants
+              </div>
+
+              <div>
+                ✓ テナント削除:
+                DELETE /api/mng/tenants/{'{tenantId}'}
+              </div>
+
+              <div>
+                ✓ ユーザー管理:
+                /tenants/{'{tenantId}'}/users
+              </div>
+
+              <div>
+                ○ サービス管理: ダミー
+              </div>
+
+              <div>
+                ○ API Key 管理: ダミー
+              </div>
+
+              <div>
+                ○ 認証モード管理: ダミー
+              </div>
+
+              <div>
+                ○ ステータス管理: ダミー
+              </div>
+
+              <div>
+                ○ Migration 管理: ダミー
+              </div>
+
+              <div>
+                ○ Health Check: ダミー
               </div>
             </div>
+
+            <p
+              style={{
+                margin: '16px 0 0 0',
+                fontSize: '12px',
+                color: '#a19f9d'
+              }}
+            >
+              ※ バックエンドの OpenAPI に API が追加されたら、
+              実APIへ置き換える。
+            </p>
           </div>
         </div>
       )}
