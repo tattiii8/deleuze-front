@@ -14,7 +14,7 @@ const api = axios.create({
  * ========================================== */
 
 const authApi = axios.create({
-  baseURL: '/api/auth/internal'
+  baseURL: 'http://192.168.8.112:5001/api/auth/internal'
 });
 
 
