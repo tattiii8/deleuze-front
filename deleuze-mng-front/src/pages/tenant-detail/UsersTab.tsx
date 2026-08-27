@@ -19,8 +19,10 @@ import UserCreateModal from './UserCreateModal';
 import styles from '../../components/tenant-detail/TenantDetailStyles';
 
 interface ApiKeyItem {
-  id: string;
-  name: string;
+  id?: string;
+  apiKeyId?: string;
+  keyId?: string;
+  name?: string;
   createdAt?: string;
   expiresAt?: string;
   [key: string]: any;
@@ -249,8 +251,17 @@ const UsersTab: React.FC<UsersTabProps> = ({
   /*
    * API Key 削除処理
    */
-  const handleDeleteApiKey = async (keyId: string, keyName: string) => {
-    if (!window.confirm(`API Key '${keyName || keyId}' を削除してもよろしいですか？`)) {
+  const handleDeleteApiKey = async (keyItem: ApiKeyItem) => {
+    // GETレスポンスからキーIDを取得 (id, apiKeyId, keyId の揺らぎに対応)
+    const keyId = keyItem.id || keyItem.apiKeyId || keyItem.keyId;
+    const keyName = keyItem.name || keyId;
+
+    if (!keyId) {
+      setApiKeyError('API Key の ID が取得できないため削除できません。');
+      return;
+    }
+
+    if (!window.confirm(`API Key '${keyName}' を削除してもよろしいですか？`)) {
       return;
     }
 
@@ -853,39 +864,49 @@ const UsersTab: React.FC<UsersTabProps> = ({
                           </tr>
                         </thead>
                         <tbody>
-                          {apiKeys.map((keyItem) => (
-                            <tr key={keyItem.id}>
-                              <td style={styles.td}>{keyItem.name || '-'}</td>
-                              <td style={styles.td}>
-                                {keyItem.createdAt
-                                  ? new Date(keyItem.createdAt).toLocaleString()
-                                  : '-'}
-                              </td>
-                              <td style={styles.td}>
-                                {keyItem.expiresAt
-                                  ? new Date(keyItem.expiresAt).toLocaleString()
-                                  : '-'}
-                              </td>
-                              <td style={{ ...styles.td, textAlign: 'center' }}>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    handleDeleteApiKey(keyItem.id, keyItem.name)
-                                  }
-                                  disabled={apiKeyLoading}
-                                  style={{
-                                    ...styles.secondaryButton,
-                                    height: '28px',
-                                    padding: '0 10px',
-                                    color: '#a80000',
-                                    borderColor: '#f8d7da'
-                                  }}
-                                >
-                                  削除
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
+                          {apiKeys.map((keyItem, index) => {
+                            const keyId =
+                              keyItem.id ||
+                              keyItem.apiKeyId ||
+                              keyItem.keyId ||
+                              String(index);
+
+                            return (
+                              <tr key={keyId}>
+                                <td style={styles.td}>{keyItem.name || '-'}</td>
+                                <td style={styles.td}>
+                                  {keyItem.createdAt
+                                    ? new Date(
+                                        keyItem.createdAt
+                                      ).toLocaleString()
+                                    : '-'}
+                                </td>
+                                <td style={styles.td}>
+                                  {keyItem.expiresAt
+                                    ? new Date(
+                                        keyItem.expiresAt
+                                      ).toLocaleString()
+                                    : '-'}
+                                </td>
+                                <td style={{ ...styles.td, textAlign: 'center' }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteApiKey(keyItem)}
+                                    disabled={apiKeyLoading}
+                                    style={{
+                                      ...styles.secondaryButton,
+                                      height: '28px',
+                                      padding: '0 10px',
+                                      color: '#a80000',
+                                      borderColor: '#f8d7da'
+                                    }}
+                                  >
+                                    削除
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     )}
