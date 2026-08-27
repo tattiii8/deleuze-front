@@ -2,8 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { Tenant, User } from '../types';
 import {
   fetchUsers,
+  fetchUserById,
   registerUser,
-  deleteUser
+  deleteUser,
+  issueApiKey
 } from '../api';
 
 interface TenantDetailProps {
@@ -44,6 +46,23 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
     useState('');
 
   /*
+   * 所属ユーザー: 一覧 / 詳細 の画面切り替え
+   */
+
+  const [usersView, setUsersView] = useState<
+    'list' | 'detail'
+  >('list');
+
+  const [selectedUser, setSelectedUser] =
+    useState<User | null>(null);
+
+  const [userDetailLoading, setUserDetailLoading] =
+    useState(false);
+
+  const [userDetailError, setUserDetailError] =
+    useState<string | null>(null);
+
+  /*
    * ユーザー登録モーダル
    */
 
@@ -70,6 +89,32 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
 
   /*
    * =========================================================
+   * API Key 発行
+   *
+   * POST /api/auth/internal/admin/apikey
+   * =========================================================
+   */
+
+  const [apiKeyLoginId, setApiKeyLoginId] =
+    useState('');
+
+  const [apiKeyName, setApiKeyName] =
+    useState('');
+
+  const [apiKeyExpiresAt, setApiKeyExpiresAt] =
+    useState('');
+
+  const [apiKeyResult, setApiKeyResult] =
+    useState<unknown>(null);
+
+  const [apiKeyLoading, setApiKeyLoading] =
+    useState(false);
+
+  const [apiKeyError, setApiKeyError] =
+    useState<string | null>(null);
+
+  /*
+   * =========================================================
    * ダミー状態
    * =========================================================
    */
@@ -79,9 +124,6 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
 
   const [dummyAuthMode, setDummyAuthMode] =
     useState<number>(0);
-
-  const [dummyApiKey, setDummyApiKey] =
-    useState<string | null>(null);
 
   const [dummyHealthStatus, setDummyHealthStatus] =
     useState<{
@@ -137,7 +179,7 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
   };
 
   /*
-   * 所属ユーザータブを開いたときに取得
+   * 所属ユーザータブを開いたときに取得（一覧画面へリセット）
    */
 
   useEffect(() => {
@@ -145,8 +187,66 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
       return;
     }
 
+    setUsersView('list');
+    setSelectedUser(null);
+    setUserDetailError(null);
+
     loadUsers();
   }, [activeTab, tenant.tenantId]);
+
+  /*
+   * =========================================================
+   * ユーザー詳細
+   *
+   * GET
+   * /api/mng/tenants/{tenantId}/users/{subjectId}
+   * =========================================================
+   */
+
+  const openUserDetail = async (user: User) => {
+    const subjectId =
+      (user as any).subjectId;
+
+    if (!subjectId) {
+      alert(
+        'ユーザーID（subjectId）が取得できないため、詳細を表示できません。'
+      );
+      return;
+    }
+
+    setUsersView('detail');
+    setSelectedUser(user);
+    setUserDetailError(null);
+    setUserDetailLoading(true);
+
+    try {
+      const data = await fetchUserById(
+        tenant.tenantId,
+        subjectId
+      );
+
+      setSelectedUser(data);
+    } catch (err: any) {
+      console.error(
+        'Failed to fetch user detail:',
+        err
+      );
+
+      setUserDetailError(
+        err?.response?.data ||
+          err?.message ||
+          'ユーザー詳細の取得に失敗しました。'
+      );
+    } finally {
+      setUserDetailLoading(false);
+    }
+  };
+
+  const closeUserDetail = () => {
+    setUsersView('list');
+    setSelectedUser(null);
+    setUserDetailError(null);
+  };
 
   /*
    * =========================================================
@@ -299,6 +399,14 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
         `ユーザー '${loginId}' を削除しました。`
       );
 
+      if (
+        usersView === 'detail' &&
+        (selectedUser as any)?.subjectId ===
+          subjectId
+      ) {
+        closeUserDetail();
+      }
+
       await loadUsers();
     } catch (err: any) {
       console.error(
@@ -391,40 +499,107 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
 
   /*
    * =========================================================
-   * ダミー: API Key 発行
+   * API Key 発行
+   *
+   * POST /api/auth/internal/admin/apikey
    * =========================================================
    */
 
-  const handleGenerateApiKey = async () => {
+  const apiKeyDisplayValue: string | null = (() => {
+    if (apiKeyResult === null || apiKeyResult === undefined) {
+      return null;
+    }
+
+    if (typeof apiKeyResult === 'string') {
+      return apiKeyResult;
+    }
+
+    if (typeof apiKeyResult === 'object') {
+      const obj = apiKeyResult as Record<string, any>;
+
+      const candidate =
+        obj.apiKey ||
+        obj.key ||
+        obj.token ||
+        obj.secret;
+
+      if (typeof candidate === 'string') {
+        return candidate;
+      }
+
+      return JSON.stringify(obj, null, 2);
+    }
+
+    return String(apiKeyResult);
+  })();
+
+  const handleIssueApiKey = async () => {
+    if (!apiKeyLoginId.trim()) {
+      setApiKeyError(
+        'ログインIDを入力してください。'
+      );
+      return;
+    }
+
+    if (!apiKeyName.trim()) {
+      setApiKeyError(
+        'API Key名を入力してください。'
+      );
+      return;
+    }
+
+    if (!apiKeyExpiresAt) {
+      setApiKeyError(
+        '有効期限を入力してください。'
+      );
+      return;
+    }
+
     if (
-      dummyApiKey &&
+      apiKeyResult &&
       !window.confirm(
-        'API Key を再発行すると既存のキーは無効になります。よろしいですか？'
+        'API Key を再発行すると既存のキーが無効になる場合があります。よろしいですか？'
       )
     ) {
       return;
     }
 
-    setActionLoading(true);
+    setApiKeyLoading(true);
+    setApiKeyError(null);
+    setApiKeyResult(null);
     setError(null);
     setSuccessMessage(null);
 
     try {
-      await new Promise((resolve) =>
-        setTimeout(resolve, 300)
-      );
+      const expiresAtIso = new Date(
+        apiKeyExpiresAt
+      ).toISOString();
 
-      const generatedKey =
-        `dummy_${tenant.tenantId}_${Date.now()}`;
+      const data = await issueApiKey({
+        tenantId: tenant.tenantId,
+        loginId: apiKeyLoginId.trim(),
+        name: apiKeyName.trim(),
+        expiresAt: expiresAtIso
+      });
 
-      setDummyApiKey(generatedKey);
+      setApiKeyResult(data);
 
       setSuccessMessage(
-        'API Key は現在ダミー表示です。' +
-          'バックエンド API 実装後に接続してください。'
+        'API Key を発行しました。'
+      );
+    } catch (err: any) {
+      console.error(
+        'Failed to issue API key:',
+        err
+      );
+
+      setApiKeyError(
+        err?.response?.data ||
+          err?.message ||
+          'API Key の発行に失敗しました。'
       );
     } finally {
-      setActionLoading(false);
+      setApiKeyLoading(false);
     }
   };
 
@@ -568,12 +743,12 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
    */
 
   const handleCopyApiKey = async () => {
-    if (!dummyApiKey) {
+    if (!apiKeyDisplayValue) {
       return;
     }
 
     await navigator.clipboard.writeText(
-      dummyApiKey
+      apiKeyDisplayValue
     );
 
     setIsCopied(true);
@@ -1142,292 +1317,475 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
       )}
 
       {/* =====================================================
-          所属ユーザー
+          所属ユーザー: 一覧
          ===================================================== */}
 
-      {activeTab === 'users' && (
-        <div style={styles.sectionContainer}>
-          <div style={styles.managementSection}>
-            <div
-              style={{
-                display: 'flex',
-                justifyContent:
-                  'space-between',
-                alignItems: 'center',
-                marginBottom: '16px',
-                gap: '12px'
-              }}
-            >
-              <div>
-                <h3
-                  style={{
-                    ...styles.managementSectionTitle,
-                    marginBottom: '4px'
-                  }}
-                >
-                  所属ユーザー
-                </h3>
-
-                <p
-                  style={{
-                    margin: 0,
-                    color: '#605e5c',
-                    fontSize: '12px'
-                  }}
-                >
-                  テナントに所属しているユーザーを表示します。
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={openUserModal}
-                disabled={
-                  userActionLoading ||
-                  usersLoading
-                }
-                style={{
-                  ...styles.primaryButton,
-                  whiteSpace: 'nowrap'
-                }}
-              >
-                ＋ ユーザーを追加
-              </button>
-            </div>
-
-            {/* =================================================
-                検索・更新
-               ================================================= */}
-
-            <div
-              style={{
-                display: 'flex',
-                justifyContent:
-                  'space-between',
-                alignItems: 'center',
-                gap: '8px',
-                marginBottom: '16px',
-                paddingBottom: '12px',
-                borderBottom:
-                  '1px solid #e1dfdd'
-              }}
-            >
-              <input
-                type="text"
-                placeholder="ログインID、ユーザー名、メールアドレスで検索..."
-                value={userSearchFilter}
-                onChange={(e) =>
-                  setUserSearchFilter(
-                    e.target.value
-                  )
-                }
-                style={{
-                  ...styles.inputField,
-                  marginTop: 0,
-                  maxWidth: '400px'
-                }}
-              />
-
-              <button
-                type="button"
-                onClick={loadUsers}
-                disabled={
-                  usersLoading ||
-                  userActionLoading
-                }
-                style={
-                  styles.secondaryButton
-                }
-              >
-                {usersLoading
-                  ? '読み込み中...'
-                  : '↻ 更新'}
-              </button>
-            </div>
-
-            {/* =================================================
-                エラー
-               ================================================= */}
-
-            {usersError && (
+      {activeTab === 'users' &&
+        usersView === 'list' && (
+          <div style={styles.sectionContainer}>
+            <div style={styles.managementSection}>
               <div
                 style={{
-                  padding: '10px 12px',
+                  display: 'flex',
+                  justifyContent:
+                    'space-between',
+                  alignItems: 'center',
                   marginBottom: '16px',
-                  backgroundColor: '#fde7e9',
-                  border:
-                    '1px solid #f8d7da',
-                  color: '#a80000',
-                  borderRadius: '2px'
+                  gap: '12px'
                 }}
               >
-                <div
-                  style={{
-                    marginBottom: '8px'
-                  }}
-                >
-                  {usersError}
+                <div>
+                  <h3
+                    style={{
+                      ...styles.managementSectionTitle,
+                      marginBottom: '4px'
+                    }}
+                  >
+                    所属ユーザー
+                  </h3>
+
+                  <p
+                    style={{
+                      margin: 0,
+                      color: '#605e5c',
+                      fontSize: '12px'
+                    }}
+                  >
+                    テナントに所属しているユーザーを表示します。
+                  </p>
                 </div>
 
                 <button
                   type="button"
+                  onClick={openUserModal}
+                  disabled={
+                    userActionLoading ||
+                    usersLoading
+                  }
+                  style={{
+                    ...styles.primaryButton,
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  ＋ ユーザーを追加
+                </button>
+              </div>
+
+              {/* =================================================
+                  検索・更新
+                 ================================================= */}
+
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent:
+                    'space-between',
+                  alignItems: 'center',
+                  gap: '8px',
+                  marginBottom: '16px',
+                  paddingBottom: '12px',
+                  borderBottom:
+                    '1px solid #e1dfdd'
+                }}
+              >
+                <input
+                  type="text"
+                  placeholder="ログインID、ユーザー名、メールアドレスで検索..."
+                  value={userSearchFilter}
+                  onChange={(e) =>
+                    setUserSearchFilter(
+                      e.target.value
+                    )
+                  }
+                  style={{
+                    ...styles.inputField,
+                    marginTop: 0,
+                    maxWidth: '400px'
+                  }}
+                />
+
+                <button
+                  type="button"
                   onClick={loadUsers}
+                  disabled={
+                    usersLoading ||
+                    userActionLoading
+                  }
                   style={
                     styles.secondaryButton
                   }
                 >
-                  再試行
+                  {usersLoading
+                    ? '読み込み中...'
+                    : '↻ 更新'}
                 </button>
               </div>
-            )}
 
-            {/* =================================================
-                Loading
-               ================================================= */}
+              {/* =================================================
+                  エラー
+                 ================================================= */}
 
-            {usersLoading ? (
-              <div
-                style={{
-                  padding: '32px 0',
-                  textAlign: 'center',
-                  color: '#605e5c'
-                }}
-              >
-                ユーザー一覧を読み込み中...
-              </div>
-            ) : filteredUsers.length === 0 ? (
-              <div
-                style={{
-                  padding: '32px 0',
-                  textAlign: 'center',
-                  color: '#605e5c'
-                }}
-              >
-                {userSearchFilter
-                  ? '検索条件に一致するユーザーが見つかりませんでした。'
-                  : 'このテナントに所属するユーザーはいません。'}
-              </div>
-            ) : (
-              <table style={styles.table}>
-                <thead>
-                  <tr>
-                    <th style={styles.th}>
-                      ログインID
-                    </th>
+              {usersError && (
+                <div
+                  style={{
+                    padding: '10px 12px',
+                    marginBottom: '16px',
+                    backgroundColor: '#fde7e9',
+                    border:
+                      '1px solid #f8d7da',
+                    color: '#a80000',
+                    borderRadius: '2px'
+                  }}
+                >
+                  <div
+                    style={{
+                      marginBottom: '8px'
+                    }}
+                  >
+                    {usersError}
+                  </div>
 
-                    <th style={styles.th}>
-                      ユーザー名
-                    </th>
+                  <button
+                    type="button"
+                    onClick={loadUsers}
+                    style={
+                      styles.secondaryButton
+                    }
+                  >
+                    再試行
+                  </button>
+                </div>
+              )}
 
-                    <th style={styles.th}>
-                      メールアドレス
-                    </th>
+              {/* =================================================
+                  Loading
+                 ================================================= */}
 
-                    <th
-                      style={{
-                        ...styles.th,
-                        textAlign: 'center',
-                        width: '90px'
-                      }}
-                    >
-                      操作
-                    </th>
-                  </tr>
-                </thead>
+              {usersLoading ? (
+                <div
+                  style={{
+                    padding: '32px 0',
+                    textAlign: 'center',
+                    color: '#605e5c'
+                  }}
+                >
+                  ユーザー一覧を読み込み中...
+                </div>
+              ) : filteredUsers.length === 0 ? (
+                <div
+                  style={{
+                    padding: '32px 0',
+                    textAlign: 'center',
+                    color: '#605e5c'
+                  }}
+                >
+                  {userSearchFilter
+                    ? '検索条件に一致するユーザーが見つかりませんでした。'
+                    : 'このテナントに所属するユーザーはいません。'}
+                </div>
+              ) : (
+                <table style={styles.table}>
+                  <thead>
+                    <tr>
+                      <th style={styles.th}>
+                        ログインID
+                      </th>
 
-                <tbody>
-                  {filteredUsers.map(
-                    (user) => {
-                      const subjectId =
-                        (user as any)
-                          .subjectId;
+                      <th style={styles.th}>
+                        ユーザー名
+                      </th>
 
-                      const loginId =
-                        (user as any)
-                          .loginId || '-';
+                      <th style={styles.th}>
+                        メールアドレス
+                      </th>
 
-                      const userName =
-                        (user as any)
-                          .userName || '-';
+                      <th
+                        style={{
+                          ...styles.th,
+                          textAlign: 'center',
+                          width: '170px'
+                        }}
+                      >
+                        操作
+                      </th>
+                    </tr>
+                  </thead>
 
-                      const email =
-                        (user as any)
-                          .email || '-';
+                  <tbody>
+                    {filteredUsers.map(
+                      (user) => {
+                        const subjectId =
+                          (user as any)
+                            .subjectId;
 
-                      return (
-                        <tr
-                          key={
-                            subjectId ||
-                            loginId
-                          }
-                        >
-                          <td
-                            style={{
-                              ...styles.td,
-                              fontFamily:
-                                'monospace'
-                            }}
-                          >
-                            {loginId}
-                          </td>
+                        const loginId =
+                          (user as any)
+                            .loginId || '-';
 
-                          <td
-                            style={
-                              styles.td
+                        const userName =
+                          (user as any)
+                            .userName || '-';
+
+                        const email =
+                          (user as any)
+                            .email || '-';
+
+                        return (
+                          <tr
+                            key={
+                              subjectId ||
+                              loginId
                             }
                           >
-                            {userName}
-                          </td>
-
-                          <td
-                            style={
-                              styles.td
-                            }
-                          >
-                            {email}
-                          </td>
-
-                          <td
-                            style={{
-                              ...styles.td,
-                              textAlign:
-                                'center'
-                            }}
-                          >
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleDeleteUser(
-                                  user
-                                )
-                              }
-                              disabled={
-                                userActionLoading
-                              }
+                            <td
                               style={{
-                                ...styles.secondaryButton,
-                                height: '28px',
-                                padding:
-                                  '0 10px',
-                                color:
-                                  '#a80000',
-                                borderColor:
-                                  '#f8d7da'
+                                ...styles.td,
+                                fontFamily:
+                                  'monospace'
                               }}
                             >
-                              削除
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    }
-                  )}
-                </tbody>
-              </table>
-            )}
+                              {loginId}
+                            </td>
+
+                            <td
+                              style={
+                                styles.td
+                              }
+                            >
+                              {userName}
+                            </td>
+
+                            <td
+                              style={
+                                styles.td
+                              }
+                            >
+                              {email}
+                            </td>
+
+                            <td
+                              style={{
+                                ...styles.td,
+                                textAlign:
+                                  'center'
+                              }}
+                            >
+                              <div
+                                style={{
+                                  display:
+                                    'flex',
+                                  gap: '8px',
+                                  justifyContent:
+                                    'center'
+                                }}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    openUserDetail(
+                                      user
+                                    )
+                                  }
+                                  disabled={
+                                    userActionLoading
+                                  }
+                                  style={{
+                                    ...styles.secondaryButton,
+                                    height: '28px',
+                                    padding:
+                                      '0 10px'
+                                  }}
+                                >
+                                  詳細
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleDeleteUser(
+                                      user
+                                    )
+                                  }
+                                  disabled={
+                                    userActionLoading
+                                  }
+                                  style={{
+                                    ...styles.secondaryButton,
+                                    height: '28px',
+                                    padding:
+                                      '0 10px',
+                                    color:
+                                      '#a80000',
+                                    borderColor:
+                                      '#f8d7da'
+                                  }}
+                                >
+                                  削除
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      }
+                    )}
+                  </tbody>
+                </table>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+
+      {/* =====================================================
+          所属ユーザー: 詳細
+         ===================================================== */}
+
+      {activeTab === 'users' &&
+        usersView === 'detail' && (
+          <div style={styles.sectionContainer}>
+            <div style={styles.managementSection}>
+              <button
+                onClick={closeUserDetail}
+                style={styles.backButton}
+              >
+                &larr; ユーザー一覧に戻る
+              </button>
+
+              <h3
+                style={styles.managementSectionTitle}
+              >
+                ユーザー詳細
+              </h3>
+
+              {userDetailError && (
+                <div
+                  style={{
+                    padding: '10px 12px',
+                    marginBottom: '16px',
+                    backgroundColor: '#fde7e9',
+                    border:
+                      '1px solid #f8d7da',
+                    color: '#a80000',
+                    borderRadius: '2px'
+                  }}
+                >
+                  {userDetailError}
+                </div>
+              )}
+
+              {userDetailLoading ? (
+                <div
+                  style={{
+                    padding: '32px 0',
+                    textAlign: 'center',
+                    color: '#605e5c'
+                  }}
+                >
+                  ユーザー詳細を読み込み中...
+                </div>
+              ) : (
+                selectedUser && (
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns:
+                        '200px 1fr',
+                      rowGap: '16px',
+                      columnGap: '12px',
+                      alignItems: 'center'
+                    }}
+                  >
+                    <span
+                      style={
+                        styles.managementItemLabel
+                      }
+                    >
+                      ログインID
+                    </span>
+
+                    <div
+                      style={{
+                        fontFamily: 'monospace',
+                        fontWeight: 600
+                      }}
+                    >
+                      {(selectedUser as any)
+                        .loginId || '-'}
+                    </div>
+
+                    <span
+                      style={
+                        styles.managementItemLabel
+                      }
+                    >
+                      ユーザーID (subjectId)
+                    </span>
+
+                    <div
+                      style={{
+                        fontFamily: 'monospace'
+                      }}
+                    >
+                      {(selectedUser as any)
+                        .subjectId || '-'}
+                    </div>
+
+                    <span
+                      style={
+                        styles.managementItemLabel
+                      }
+                    >
+                      ユーザー名
+                    </span>
+
+                    <div>
+                      {(selectedUser as any)
+                        .userName || '-'}
+                    </div>
+
+                    <span
+                      style={
+                        styles.managementItemLabel
+                      }
+                    >
+                      メールアドレス
+                    </span>
+
+                    <div>
+                      {(selectedUser as any)
+                        .email || '-'}
+                    </div>
+                  </div>
+                )
+              )}
+
+              {selectedUser && !userDetailLoading && (
+                <div
+                  style={{
+                    marginTop: '20px',
+                    paddingTop: '16px',
+                    borderTop:
+                      '1px solid #e1dfdd'
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleDeleteUser(
+                        selectedUser
+                      )
+                    }
+                    disabled={
+                      userActionLoading
+                    }
+                    style={styles.dangerButton}
+                  >
+                    このユーザーを削除
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
       {/* =====================================================
           構成・設定
@@ -1517,68 +1875,188 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
                 fontSize: '12px'
               }}
             >
-              ※ API Key 発行 API は現在の OpenAPI
-              に存在しません。UI確認用のダミーキーのみ生成します。
+              ユーザー用の API Key を発行します
+              （POST /api/auth/internal/admin/apikey）。
+              ※ レスポンスの正確な Schema が未提示のため、
+              返却された内容をそのまま表示します。
             </p>
 
-            <div
-              style={styles.managementItem}
-            >
-              <button
-                onClick={
-                  handleGenerateApiKey
-                }
-                disabled={
-                  actionLoading
-                }
-                style={
-                  styles.primaryButton
-                }
+            {apiKeyError && (
+              <div
+                style={{
+                  padding: '10px 12px',
+                  marginBottom: '16px',
+                  backgroundColor: '#fde7e9',
+                  border: '1px solid #f8d7da',
+                  color: '#a80000',
+                  borderRadius: '2px'
+                }}
               >
-                {dummyApiKey
-                  ? 'API Key を再発行（ダミー）'
-                  : 'API Key を新規発行（ダミー）'}
-              </button>
+                {apiKeyError}
+              </div>
+            )}
 
-              {dummyApiKey && (
-                <div
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px',
+                maxWidth: '480px'
+              }}
+            >
+              <div>
+                <label
                   style={{
-                    display: 'flex',
-                    gap: '8px',
-                    width: '100%',
-                    maxWidth: '560px',
-                    marginTop: '8px'
+                    fontWeight: 600,
+                    fontSize: '12px'
                   }}
                 >
-                  <input
-                    type="text"
-                    readOnly
-                    value={
-                      dummyApiKey
-                    }
+                  ログインID{' '}
+                  <span
                     style={{
-                      ...styles.inputSelect,
-                      flex: 1,
-                      fontFamily:
-                        'monospace'
+                      color: '#a80000'
                     }}
-                  />
-
-                  <button
-                    onClick={
-                      handleCopyApiKey
-                    }
-                    style={
-                      styles.secondaryButton
-                    }
                   >
-                    {isCopied
-                      ? 'コピー完了'
-                      : 'コピー'}
-                  </button>
-                </div>
-              )}
+                    *
+                  </span>
+                </label>
+
+                <input
+                  type="text"
+                  placeholder="例: admin"
+                  value={apiKeyLoginId}
+                  onChange={(e) =>
+                    setApiKeyLoginId(
+                      e.target.value
+                    )
+                  }
+                  disabled={apiKeyLoading}
+                  style={styles.inputField}
+                />
+              </div>
+
+              <div>
+                <label
+                  style={{
+                    fontWeight: 600,
+                    fontSize: '12px'
+                  }}
+                >
+                  API Key名{' '}
+                  <span
+                    style={{
+                      color: '#a80000'
+                    }}
+                  >
+                    *
+                  </span>
+                </label>
+
+                <input
+                  type="text"
+                  placeholder="例: テスト用API Key"
+                  value={apiKeyName}
+                  onChange={(e) =>
+                    setApiKeyName(
+                      e.target.value
+                    )
+                  }
+                  disabled={apiKeyLoading}
+                  style={styles.inputField}
+                />
+              </div>
+
+              <div>
+                <label
+                  style={{
+                    fontWeight: 600,
+                    fontSize: '12px'
+                  }}
+                >
+                  有効期限{' '}
+                  <span
+                    style={{
+                      color: '#a80000'
+                    }}
+                  >
+                    *
+                  </span>
+                </label>
+
+                <input
+                  type="datetime-local"
+                  value={apiKeyExpiresAt}
+                  onChange={(e) =>
+                    setApiKeyExpiresAt(
+                      e.target.value
+                    )
+                  }
+                  disabled={apiKeyLoading}
+                  style={styles.inputField}
+                />
+              </div>
             </div>
+
+            <div
+              style={{
+                marginTop: '16px'
+              }}
+            >
+              <button
+                onClick={handleIssueApiKey}
+                disabled={apiKeyLoading}
+                style={styles.primaryButton}
+              >
+                {apiKeyLoading
+                  ? '発行中...'
+                  : apiKeyResult
+                  ? 'API Key を再発行'
+                  : 'API Key を発行'}
+              </button>
+            </div>
+
+            {apiKeyDisplayValue && (
+              <div
+                style={{
+                  display: 'flex',
+                  gap: '8px',
+                  width: '100%',
+                  maxWidth: '560px',
+                  marginTop: '16px',
+                  alignItems: 'flex-start'
+                }}
+              >
+                <textarea
+                  readOnly
+                  value={apiKeyDisplayValue}
+                  rows={
+                    apiKeyDisplayValue.includes(
+                      '\n'
+                    )
+                      ? 6
+                      : 1
+                  }
+                  style={{
+                    ...styles.inputSelect,
+                    flex: 1,
+                    height: 'auto',
+                    minHeight: '32px',
+                    padding: '8px',
+                    fontFamily: 'monospace',
+                    resize: 'vertical'
+                  }}
+                />
+
+                <button
+                  onClick={handleCopyApiKey}
+                  style={styles.secondaryButton}
+                >
+                  {isCopied
+                    ? 'コピー完了'
+                    : 'コピー'}
+                </button>
+              </div>
+            )}
           </div>
 
           {/* =================================================
@@ -1958,11 +2436,12 @@ const TenantDetail: React.FC<TenantDetailProps> = ({
               </div>
 
               <div>
-                ○ サービス管理: ダミー
+                ✓ API Key 発行:
+                POST /api/auth/internal/admin/apikey
               </div>
 
               <div>
-                ○ API Key 管理: ダミー
+                ○ サービス管理: ダミー
               </div>
 
               <div>

@@ -1,9 +1,22 @@
 import axios from 'axios';
 import { Tenant, User } from './types';
 
+/* ==========================================
+ * Management API
+ * ========================================== */
+
 const api = axios.create({
   baseURL: '/api/mng'
 });
+
+/* ==========================================
+ * Auth Internal API
+ * ========================================== */
+
+const authApi = axios.create({
+  baseURL: '/api/auth/internal'
+});
+
 
 /* ==========================================
  * テナント管理 (Tenants)
@@ -38,13 +51,6 @@ export async function fetchTenantById(
  * 新規テナントを作成
  *
  * POST /api/mng/tenants
- *
- * CreateTenantRequest:
- * {
- *   tenantId: string;
- *   tenantName?: string;
- *   displayName?: string;
- * }
  */
 export async function createTenant(payload: {
   tenantId: string;
@@ -89,14 +95,6 @@ export async function fetchUsers(
  * ユーザーを登録
  *
  * POST /api/mng/tenants/{tenantId}/users
- *
- * CreateUserRequest:
- * {
- *   loginId: string;
- *   password: string;
- *   userName?: string;
- *   email?: string;
- * }
  */
 export async function registerUser(
   tenantId: string,
@@ -145,72 +143,46 @@ export async function deleteUser(
 
 
 /* ==========================================
- * 未実装API
+ * API Key 管理
  * ========================================== */
 
-/*
- * 以下は現在の OpenAPI に存在しないため、
- * バックエンド実装後に有効化する。
+/**
+ * 管理者APIからユーザー用API Keyを発行
  *
- * ------------------------------------------
- * テナントサービス管理
- * ------------------------------------------
+ * POST /api/auth/internal/admin/apikey
  *
- * POST   /tenants/{tenantId}/services
- * DELETE /tenants/{tenantId}/services
+ * Request:
+ * {
+ *   tenantId: string;
+ *   loginId: string;
+ *   name: string;
+ *   expiresAt: string;
+ * }
  *
- * export async function enableService(...)
- * export async function disableService(...)
+ * 例:
+ * {
+ *   tenantId: "flaubert",
+ *   loginId: "admin",
+ *   name: "テスト用API Key",
+ *   expiresAt: "2026-12-31T23:59:59Z"
+ * }
  *
- *
- * ------------------------------------------
- * テナント API Key 管理
- * ------------------------------------------
- *
- * POST /tenants/{tenantId}/apikey
- *
- * export async function generateApiKey(...)
- *
- *
- * ------------------------------------------
- * テナント認証モード管理
- * ------------------------------------------
- *
- * PATCH /tenants/{tenantId}/authmode
- *
- * export async function updateAuthMode(...)
- *
- *
- * ------------------------------------------
- * テナントステータス管理
- * ------------------------------------------
- *
- * GET   /tenants/{tenantId}/status
- * PATCH /tenants/{tenantId}/status
- *
- * export async function fetchTenantStatus(...)
- * export async function updateTenantStatus(...)
- *
- *
- * ------------------------------------------
- * テナント DB 管理
- * ------------------------------------------
- *
- * GET  /tenants/{tenantId}/migrations
- * POST /tenants/{tenantId}/migrate/{serviceKey}
- *
- * export async function fetchTenantMigrations(...)
- * export async function migrateTenant(...)
- *
- *
- * ------------------------------------------
- * テナント Health Check
- * ------------------------------------------
- *
- * GET /tenants/{tenantId}/health
- *
- * export async function checkTenantHealth(...)
+ * ※レスポンスの正確なSchemaが未提示のため、
+ *   ひとまず unknown として受け取る。
  */
+export async function issueApiKey(payload: {
+  tenantId: string;
+  loginId: string;
+  name: string;
+  expiresAt: string;
+}): Promise<unknown> {
+  const response = await authApi.post(
+    '/admin/apikey',
+    payload
+  );
+
+  return response.data;
+}
 
 
 /* ==========================================
@@ -219,8 +191,6 @@ export async function deleteUser(
 
 /**
  * 現在バックエンド未実装のためダミーデータを返す。
- *
- * UI開発用。
  */
 export async function fetchTenantStatus(
   tenantId: string
@@ -238,8 +208,6 @@ export async function fetchTenantStatus(
 
 /**
  * 現在バックエンド未実装のためダミーデータを返す。
- *
- * UI開発用。
  */
 export async function checkTenantHealth(
   tenantId: string
