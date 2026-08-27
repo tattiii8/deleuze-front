@@ -587,7 +587,7 @@ const UsersTab: React.FC<UsersTabProps> = ({
                 </div>
 
                 <span style={styles.managementItemLabel}>
-                  ユーザーID (subjectId)
+                  ユーザーID
                 </span>
                 <div style={{ fontFamily: 'monospace' }}>
                   {(selectedUser as any).subjectId || '-'}
