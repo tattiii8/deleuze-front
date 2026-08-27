@@ -9,12 +9,22 @@ import {
   fetchUsers,
   fetchUserById,
   deleteUser,
-  issueApiKey
+  issueApiKey,
+  fetchApiKeys,
+  deleteApiKey
 } from '../../api';
 
 import UserCreateModal from './UserCreateModal';
 
 import styles from '../../components/tenant-detail/TenantDetailStyles';
+
+interface ApiKeyItem {
+  id: string;
+  name: string;
+  createdAt?: string;
+  expiresAt?: string;
+  [key: string]: any;
+}
 
 interface UsersTabProps {
   tenant: Tenant;
@@ -42,8 +52,12 @@ const UsersTab: React.FC<UsersTabProps> = ({
   const [userActionLoading, setUserActionLoading] = useState(false);
 
   /*
-   * API Key 発行用の状態
+   * API Key 管理用の状態
    */
+  const [apiKeyTab, setApiKeyTab] = useState<'issue' | 'list'>('issue');
+  const [apiKeys, setApiKeys] = useState<ApiKeyItem[]>([]);
+  const [apiKeysLoading, setApiKeysLoading] = useState(false);
+
   const [apiKeyName, setApiKeyName] = useState('');
   const [apiKeyExpiresAt, setApiKeyExpiresAt] = useState('');
   const [apiKeyResult, setApiKeyResult] = useState<unknown>(null);
@@ -103,6 +117,27 @@ const UsersTab: React.FC<UsersTabProps> = ({
   }, [tenant.tenantId]);
 
   /*
+   * API Key 一覧の取得
+   */
+  const loadApiKeys = async (loginId: string) => {
+    setApiKeysLoading(true);
+    setApiKeyError(null);
+    try {
+      const data = await fetchApiKeys(tenant.tenantId, loginId);
+      setApiKeys(Array.isArray(data) ? data : []);
+    } catch (err: any) {
+      console.error('Failed to fetch API keys:', err);
+      const message =
+        err?.response?.data ||
+        err?.message ||
+        'API Key 一覧の取得に失敗しました。';
+      setApiKeyError(message);
+    } finally {
+      setApiKeysLoading(false);
+    }
+  };
+
+  /*
    * ユーザー詳細
    */
   const openUserDetail = async (user: User) => {
@@ -120,7 +155,8 @@ const UsersTab: React.FC<UsersTabProps> = ({
     setUserDetailError(null);
     setUserDetailLoading(true);
 
-    // API Key 入力状態のリセット
+    // API Key 状態のリセット
+    setApiKeyTab('issue');
     setApiKeyName('');
     setApiKeyExpiresAt('');
     setApiKeyResult(null);
@@ -129,6 +165,9 @@ const UsersTab: React.FC<UsersTabProps> = ({
     try {
       const data = await fetchUserById(tenant.tenantId, subjectId);
       setSelectedUser(data);
+      if ((data as any)?.loginId) {
+        loadApiKeys((data as any).loginId);
+      }
     } catch (err: any) {
       console.error('Failed to fetch user detail:', err);
       const message =
@@ -151,7 +190,7 @@ const UsersTab: React.FC<UsersTabProps> = ({
   };
 
   /*
-   * API Key 発行処理（選択中ユーザーに対して実行）
+   * API Key 発行処理
    */
   const handleIssueApiKeyForUser = async () => {
     if (!selectedUser) return;
@@ -174,15 +213,6 @@ const UsersTab: React.FC<UsersTabProps> = ({
       return;
     }
 
-    if (
-      apiKeyResult &&
-      !window.confirm(
-        'API Key を再発行すると既存のキーが無効になる場合があります。よろしいですか？'
-      )
-    ) {
-      return;
-    }
-
     setApiKeyLoading(true);
     setApiKeyError(null);
     setApiKeyResult(null);
@@ -201,6 +231,8 @@ const UsersTab: React.FC<UsersTabProps> = ({
 
       setApiKeyResult(data);
       onSuccess(`ユーザー '${loginId}' の API Key を発行しました。`);
+      // 発行後に一覧も更新
+      loadApiKeys(loginId);
     } catch (err: any) {
       console.error('Failed to issue API key:', err);
       const message =
@@ -209,6 +241,35 @@ const UsersTab: React.FC<UsersTabProps> = ({
         'API Key の発行に失敗しました。';
       setApiKeyError(message);
       onError(message);
+    } finally {
+      setApiKeyLoading(false);
+    }
+  };
+
+  /*
+   * API Key 削除処理
+   */
+  const handleDeleteApiKey = async (keyId: string, keyName: string) => {
+    if (!window.confirm(`API Key '${keyName || keyId}' を削除してもよろしいですか？`)) {
+      return;
+    }
+
+    setApiKeyLoading(true);
+    setApiKeyError(null);
+    try {
+      await deleteApiKey(keyId);
+      onSuccess('API Key を削除しました。');
+      const loginId = (selectedUser as any)?.loginId;
+      if (loginId) {
+        await loadApiKeys(loginId);
+      }
+    } catch (err: any) {
+      console.error('Failed to delete API key:', err);
+      const message =
+        err?.response?.data ||
+        err?.message ||
+        'API Key の削除に失敗しました。';
+      setApiKeyError(message);
     } finally {
       setApiKeyLoading(false);
     }
@@ -234,9 +295,7 @@ const UsersTab: React.FC<UsersTabProps> = ({
     const subjectId = (user as any).subjectId;
 
     if (!subjectId) {
-      alert(
-        'ユーザーID（subjectId）が取得できないため、削除できません。'
-      );
+      alert('ユーザーID（subjectId）が取得できないため、削除できません。');
       return;
     }
 
@@ -600,7 +659,7 @@ const UsersTab: React.FC<UsersTabProps> = ({
                 <div>{(selectedUser as any).email || '-'}</div>
               </div>
 
-              {/* API Key 発行フォーム */}
+              {/* API Key 管理セクション */}
               <div
                 style={{
                   marginTop: '24px',
@@ -609,8 +668,59 @@ const UsersTab: React.FC<UsersTabProps> = ({
                 }}
               >
                 <h4 style={{ margin: '0 0 12px 0', fontSize: '14px' }}>
-                  API Key の発行
+                  API Key の管理
                 </h4>
+
+                {/* タブ切替ボタン */}
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: '8px',
+                    borderBottom: '1px solid #e1dfdd',
+                    marginBottom: '16px'
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setApiKeyTab('issue')}
+                    style={{
+                      padding: '8px 16px',
+                      cursor: 'pointer',
+                      border: 'none',
+                      background: 'none',
+                      borderBottom:
+                        apiKeyTab === 'issue'
+                          ? '2px solid #0078d4'
+                          : '2px solid transparent',
+                      fontWeight: apiKeyTab === 'issue' ? 'bold' : 'normal',
+                      color: apiKeyTab === 'issue' ? '#0078d4' : '#605e5c'
+                    }}
+                  >
+                    発行
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setApiKeyTab('list');
+                      const loginId = (selectedUser as any)?.loginId;
+                      if (loginId) loadApiKeys(loginId);
+                    }}
+                    style={{
+                      padding: '8px 16px',
+                      cursor: 'pointer',
+                      border: 'none',
+                      background: 'none',
+                      borderBottom:
+                        apiKeyTab === 'list'
+                          ? '2px solid #0078d4'
+                          : '2px solid transparent',
+                      fontWeight: apiKeyTab === 'list' ? 'bold' : 'normal',
+                      color: apiKeyTab === 'list' ? '#0078d4' : '#605e5c'
+                    }}
+                  >
+                    一覧
+                  </button>
+                </div>
 
                 {apiKeyError && (
                   <div
@@ -628,89 +738,157 @@ const UsersTab: React.FC<UsersTabProps> = ({
                   </div>
                 )}
 
-                <div
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '12px',
-                    maxWidth: '400px'
-                  }}
-                >
-                  <div>
-                    <label style={{ fontWeight: 600, fontSize: '12px' }}>
-                      API Key名 <span style={{ color: '#a80000' }}>*</span>
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="例: CLIツール用キー"
-                      value={apiKeyName}
-                      onChange={(e) => setApiKeyName(e.target.value)}
-                      disabled={apiKeyLoading || userActionLoading}
-                      style={styles.inputField}
-                    />
-                  </div>
-
-                  <div>
-                    <label style={{ fontWeight: 600, fontSize: '12px' }}>
-                      有効期限 <span style={{ color: '#a80000' }}>*</span>
-                    </label>
-                    <input
-                      type="datetime-local"
-                      value={apiKeyExpiresAt}
-                      onChange={(e) => setApiKeyExpiresAt(e.target.value)}
-                      disabled={apiKeyLoading || userActionLoading}
-                      style={styles.inputField}
-                    />
-                  </div>
-
-                  <div>
-                    <button
-                      type="button"
-                      onClick={handleIssueApiKeyForUser}
-                      disabled={apiKeyLoading || userActionLoading}
-                      style={styles.primaryButton}
-                    >
-                      {apiKeyLoading
-                        ? '発行中...'
-                        : apiKeyResult
-                        ? 'API Key を再発行'
-                        : 'API Key を発行'}
-                    </button>
-                  </div>
-                </div>
-
-                {/* API Key 発行結果 */}
-                {apiKeyDisplayValue && (
+                {/* タブ1: 発行 */}
+                {apiKeyTab === 'issue' && (
                   <div
                     style={{
                       display: 'flex',
-                      gap: '8px',
-                      maxWidth: '560px',
-                      marginTop: '16px',
-                      alignItems: 'flex-start'
+                      flexDirection: 'column',
+                      gap: '12px',
+                      maxWidth: '400px'
                     }}
                   >
-                    <textarea
-                      readOnly
-                      value={apiKeyDisplayValue}
-                      rows={apiKeyDisplayValue.includes('\n') ? 5 : 1}
-                      style={{
-                        ...styles.inputSelect,
-                        flex: 1,
-                        height: 'auto',
-                        minHeight: '32px',
-                        padding: '8px',
-                        fontFamily: 'monospace',
-                        resize: 'vertical'
-                      }}
-                    />
-                    <button
-                      type="button"
-                      onClick={handleCopyApiKey}
-                      style={styles.secondaryButton}
-                    >
-                      {isCopied ? 'コピー完了' : 'コピー'}
-                    </button>
+                    <div>
+                      <label style={{ fontWeight: 600, fontSize: '12px' }}>
+                        API Key名 <span style={{ color: '#a80000' }}>*</span>
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="例: CLIツール用キー"
+                        value={apiKeyName}
+                        onChange={(e) => setApiKeyName(e.target.value)}
+                        disabled={apiKeyLoading || userActionLoading}
+                        style={styles.inputField}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ fontWeight: 600, fontSize: '12px' }}>
+                        有効期限 <span style={{ color: '#a80000' }}>*</span>
+                      </label>
+                      <input
+                        type="datetime-local"
+                        value={apiKeyExpiresAt}
+                        onChange={(e) => setApiKeyExpiresAt(e.target.value)}
+                        disabled={apiKeyLoading || userActionLoading}
+                        style={styles.inputField}
+                      />
+                    </div>
+
+                    <div>
+                      <button
+                        type="button"
+                        onClick={handleIssueApiKeyForUser}
+                        disabled={apiKeyLoading || userActionLoading}
+                        style={styles.primaryButton}
+                      >
+                        {apiKeyLoading ? '発行中...' : 'API Key を発行'}
+                      </button>
+                    </div>
+
+                    {/* 発行結果表示 */}
+                    {apiKeyDisplayValue && (
+                      <div
+                        style={{
+                          display: 'flex',
+                          gap: '8px',
+                          maxWidth: '560px',
+                          marginTop: '16px',
+                          alignItems: 'flex-start'
+                        }}
+                      >
+                        <textarea
+                          readOnly
+                          value={apiKeyDisplayValue}
+                          rows={apiKeyDisplayValue.includes('\n') ? 5 : 1}
+                          style={{
+                            ...styles.inputSelect,
+                            flex: 1,
+                            height: 'auto',
+                            minHeight: '32px',
+                            padding: '8px',
+                            fontFamily: 'monospace',
+                            resize: 'vertical'
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={handleCopyApiKey}
+                          style={styles.secondaryButton}
+                        >
+                          {isCopied ? 'コピー完了' : 'コピー'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* タブ2: 一覧 */}
+                {apiKeyTab === 'list' && (
+                  <div>
+                    {apiKeysLoading ? (
+                      <div style={{ color: '#605e5c', padding: '12px 0' }}>
+                        API Key 一覧を読み込み中...
+                      </div>
+                    ) : apiKeys.length === 0 ? (
+                      <div style={{ color: '#605e5c', padding: '12px 0' }}>
+                        発行済みの API Key はありません。
+                      </div>
+                    ) : (
+                      <table style={styles.table}>
+                        <thead>
+                          <tr>
+                            <th style={styles.th}>Key 名</th>
+                            <th style={styles.th}>作成日時</th>
+                            <th style={styles.th}>有効期限</th>
+                            <th
+                              style={{
+                                ...styles.th,
+                                textAlign: 'center',
+                                width: '100px'
+                              }}
+                            >
+                              操作
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {apiKeys.map((keyItem) => (
+                            <tr key={keyItem.id}>
+                              <td style={styles.td}>{keyItem.name || '-'}</td>
+                              <td style={styles.td}>
+                                {keyItem.createdAt
+                                  ? new Date(keyItem.createdAt).toLocaleString()
+                                  : '-'}
+                              </td>
+                              <td style={styles.td}>
+                                {keyItem.expiresAt
+                                  ? new Date(keyItem.expiresAt).toLocaleString()
+                                  : '-'}
+                              </td>
+                              <td style={{ ...styles.td, textAlign: 'center' }}>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleDeleteApiKey(keyItem.id, keyItem.name)
+                                  }
+                                  disabled={apiKeyLoading}
+                                  style={{
+                                    ...styles.secondaryButton,
+                                    height: '28px',
+                                    padding: '0 10px',
+                                    color: '#a80000',
+                                    borderColor: '#f8d7da'
+                                  }}
+                                >
+                                  削除
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
                   </div>
                 )}
               </div>

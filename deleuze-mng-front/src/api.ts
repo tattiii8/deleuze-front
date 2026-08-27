@@ -150,25 +150,6 @@ export async function deleteUser(
  * 管理者APIからユーザー用API Keyを発行
  *
  * POST /api/auth/internal/admin/apikey
- *
- * Request:
- * {
- *   tenantId: string;
- *   loginId: string;
- *   name: string;
- *   expiresAt: string;
- * }
- *
- * 例:
- * {
- *   tenantId: "flaubert",
- *   loginId: "admin",
- *   name: "テスト用API Key",
- *   expiresAt: "2026-12-31T23:59:59Z"
- * }
- *
- * ※レスポンスの正確なSchemaが未提示のため、
- *   ひとまず unknown として受け取る。
  */
 export async function issueApiKey(payload: {
   tenantId: string;
@@ -182,6 +163,34 @@ export async function issueApiKey(payload: {
   );
 
   return response.data;
+}
+
+/**
+ * ユーザーのAPI Key一覧を取得
+ *
+ * GET /api/auth/internal/admin/apikey/{loginId}?tenantId={tenantId}
+ */
+export async function fetchApiKeys(
+  tenantId: string,
+  loginId: string
+): Promise<unknown> {
+  const response = await authApi.get(
+    `/admin/apikey/${encodeURIComponent(loginId)}`,
+    {
+      params: { tenantId }
+    }
+  );
+
+  return response.data;
+}
+
+/**
+ * API Key を削除
+ *
+ * DELETE /api/auth/internal/admin/apikey/{id}
+ */
+export async function deleteApiKey(id: string): Promise<void> {
+  await authApi.delete(`/admin/apikey/${id}`);
 }
 
 
