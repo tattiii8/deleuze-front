@@ -1,12 +1,8 @@
 // src/components/Header.tsx
 import React from 'react';
 
-interface HeaderProps {
-  currentTab: 'tenants' | 'users';
-  onSelectTab: (tab: 'tenants' | 'users') => void;
-}
-
-export const Header: React.FC<HeaderProps> = ({ currentTab, onSelectTab }) => {
+// Propsが不要になったため空にするか、インターフェース自体を削除します
+export const Header: React.FC = () => {
   return (
     <header style={{
       backgroundColor: '#0066cc',
@@ -21,36 +17,20 @@ export const Header: React.FC<HeaderProps> = ({ currentTab, onSelectTab }) => {
         Deleuze Management Console
       </h1>
       <nav style={{ display: 'flex', gap: '8px' }}>
-        <button
-          onClick={() => onSelectTab('tenants')}
+        {/*
+          タブ切り替えが不要になったため、ナビゲーションボタンを削除またはコメントアウト
+          必要であれば「テナント管理」のラベルだけ残すことも可能です
+        */}
+        <div
           style={{
-            backgroundColor: currentTab === 'tenants' ? '#004080' : 'transparent',
             color: '#ffffff',
-            border: 'none',
             padding: '8px 16px',
-            borderRadius: '4px',
-            cursor: 'pointer',
             fontSize: '14px',
-            fontWeight: currentTab === 'tenants' ? 'bold' : 'normal'
+            fontWeight: 'bold'
           }}
         >
           テナント管理
-        </button>
-        <button
-          onClick={() => onSelectTab('users')}
-          style={{
-            backgroundColor: currentTab === 'users' ? '#004080' : 'transparent',
-            color: '#ffffff',
-            border: 'none',
-            padding: '8px 16px',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontSize: '14px',
-            fontWeight: currentTab === 'users' ? 'bold' : 'normal'
-          }}
-        >
-          ユーザー管理
-        </button>
+        </div>
       </nav>
     </header>
   );
