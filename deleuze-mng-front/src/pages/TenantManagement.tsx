@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Tenant } from '../types';
+import { registerAuthTenant, deleteAuthTenant } from '../api';
 
 interface TenantManagementProps {
   tenants: Tenant[];
@@ -30,6 +31,7 @@ export const TenantManagement: React.FC<TenantManagementProps> = ({
   const [newTenantId, setNewTenantId] = useState('');
   const [newTenantName, setNewTenantName] = useState('');
   const [newTenantDisplayName, setNewTenantDisplayName] = useState('');
+  const [syncAuthTenant, setSyncAuthTenant] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -45,6 +47,7 @@ export const TenantManagement: React.FC<TenantManagementProps> = ({
     setNewTenantId('');
     setNewTenantName('');
     setNewTenantDisplayName('');
+    setSyncAuthTenant(true);
   };
 
   const handleCreateSubmit = async (e: React.FormEvent) => {
@@ -63,6 +66,14 @@ export const TenantManagement: React.FC<TenantManagementProps> = ({
         tenantName: newTenantName.trim() || undefined,
         displayName: newTenantDisplayName.trim() || undefined
       });
+
+      if (syncAuthTenant) {
+        try {
+          await registerAuthTenant({ tenantId: newTenantId.trim() });
+        } catch (authErr: any) {
+          console.warn('deleuze-auth テナント自動登録警告:', authErr);
+        }
+      }
 
       closeModal();
       await onRefresh();
@@ -88,6 +99,11 @@ export const TenantManagement: React.FC<TenantManagementProps> = ({
 
     try {
       await onDeleteTenant(tenantId);
+      try {
+        await deleteAuthTenant(tenantId);
+      } catch (authErr: any) {
+        console.warn('deleuze-auth テナント自動削除警告:', authErr);
+      }
       await onRefresh();
     } catch (err: any) {
       alert(
@@ -591,6 +607,18 @@ export const TenantManagement: React.FC<TenantManagementProps> = ({
                   }
                   style={styles.inputField}
                 />
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <input
+                  type="checkbox"
+                  id="syncAuthTenant"
+                  checked={syncAuthTenant}
+                  onChange={(e) => setSyncAuthTenant(e.target.checked)}
+                />
+                <label htmlFor="syncAuthTenant" style={{ fontSize: '12px', cursor: 'pointer' }}>
+                  deleuze-auth にも同名テナントを同時登録する
+                </label>
               </div>
 
               <div

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { User, Tenant } from '../types';
+import { registerAuthUser } from '../api';
 
 interface UserManagementProps {
   users: User[];
@@ -36,6 +37,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({
   const [userName, setUserName] = useState('');
   const [email, setEmail] = useState('');
   const [selectedTenantId, setSelectedTenantId] = useState('');
+  const [syncAuthUser, setSyncAuthUser] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -53,6 +55,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({
     setUserName('');
     setEmail('');
     setSelectedTenantId('');
+    setSyncAuthUser(true);
   };
 
   const handleRegisterSubmit = async (e: React.FormEvent) => {
@@ -83,7 +86,20 @@ export const UserManagement: React.FC<UserManagementProps> = ({
         });
       }
 
+      if (syncAuthUser) {
+        try {
+          await registerAuthUser({
+            tenantId,
+            loginId: loginId.trim(),
+            password: password.trim()
+          });
+        } catch (authErr: any) {
+          console.warn('deleuze-auth ユーザー自動登録警告:', authErr);
+        }
+      }
+
       closeModal();
+      if (onRefresh) await onRefresh();
     } catch (err: any) {
       setActionError(
         err.message || 'ユーザーの登録に失敗しました。'
@@ -633,6 +649,18 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                     style={styles.inputField}
                   />
                 )}
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <input
+                  type="checkbox"
+                  id="syncAuthUser"
+                  checked={syncAuthUser}
+                  onChange={(e) => setSyncAuthUser(e.target.checked)}
+                />
+                <label htmlFor="syncAuthUser" style={{ fontSize: '12px', cursor: 'pointer' }}>
+                  deleuze-auth にも同名ユーザーを同時登録する
+                </label>
               </div>
 
               <div
