@@ -1,5 +1,8 @@
-FROM node:20-alpine AS build
+FROM node:20-slim AS build
 WORKDIR /app
+
+# IPv6 DNSタイムアウトによるハングを防ぐため IPv4 優先に設定
+ENV NODE_OPTIONS="--dns-result-order=ipv4first"
 
 COPY package*.json ./
 RUN npm ci --legacy-peer-deps || npm install --legacy-peer-deps --no-audit --no-fund
